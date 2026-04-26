@@ -1,0 +1,44 @@
+stream {
+    upstream wazuh_agent_events {
+        hash $remote_addr consistent;
+{% set worker_hosts = [] %}
+{% for host in groups.get('wazuh_managers', []) %}
+{% if hostvars[host].wazuh_manager_type | default('worker') == 'worker' %}
+{% set _ = worker_hosts.append(host) %}
+{% endif %}
+{% endfor %}
+{% set event_hosts = worker_hosts if (wazuh_lb_1514_to_workers_only | default(true) | bool and worker_hosts | length > 0) else groups.get('wazuh_managers', []) %}
+{% for host in event_hosts %}
+        server {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1514;
+{% endfor %}
+    }
+
+    upstream wazuh_agent_enrollment {
+{% for host in groups.get('wazuh_managers', []) %}
+{% if hostvars[host].wazuh_manager_type | default('worker') == 'master' %}
+        server {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1515;
+{% endif %}
+{% endfor %}
+    }
+
+    upstream wazuh_dashboard_https {
+{% for host in groups.get('wazuh_dashboards', []) %}
+        server {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:{{ wazuh_dashboard_port | default(443) }};
+{% endfor %}
+    }
+
+    server {
+        listen 1514;
+        proxy_pass wazuh_agent_events;
+    }
+
+    server {
+        listen 1515;
+        proxy_pass wazuh_agent_enrollment;
+    }
+
+    server {
+        listen {{ wazuh_lb_dashboard_frontend_port | default(443) }};
+        proxy_pass wazuh_dashboard_https;
+    }
+}

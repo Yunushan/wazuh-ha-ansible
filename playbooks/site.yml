@@ -1,0 +1,9 @@
+---
+- import_playbook: preflight.yml
+- import_playbook: generate.yml
+- import_playbook: distribute.yml
+- import_playbook: install-indexers.yml
+- import_playbook: install-managers.yml
+- import_playbook: install-dashboards.yml
+- import_playbook: install-loadbalancers.yml
+- import_playbook: verify.yml

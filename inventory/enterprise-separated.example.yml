@@ -1,0 +1,89 @@
+---
+# Example separated enterprise topology.
+# Components run on dedicated nodes. Replace all addresses before use.
+
+all:
+  vars:
+    ansible_user: ec2-user
+    ansible_become: true
+    wazuh_version: "4.14"
+    wazuh_install_workdir: "/opt/wazuh-ha-install"
+    wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
+    wazuh_allow_unsupported_distros: false
+    wazuh_load_balancer_engine: "haproxy"
+    wazuh_enable_keepalived: true
+    wazuh_lb_virtual_ip: "10.20.0.50/24"
+    wazuh_keepalived_interface: "eth0"
+    wazuh_keepalived_router_id: 52
+    wazuh_keepalived_auth_pass: "CHANGE_ME_52"
+    wazuh_dashboard_port: 443
+    wazuh_lb_dashboard_frontend_port: 443
+    wazuh_lb_expose_indexer_api: false
+    wazuh_lb_1514_to_workers_only: true
+
+  children:
+    wazuh_generator:
+      hosts:
+        idx-1:
+
+    all_wazuh_nodes:
+      children:
+        wazuh_indexers:
+        wazuh_managers:
+        wazuh_dashboards:
+        wazuh_loadbalancers:
+
+    wazuh_indexers:
+      hosts:
+        idx-1:
+          ansible_host: 10.20.0.11
+          wazuh_node_ip: 10.20.0.11
+          wazuh_indexer_name: indexer-1
+        idx-2:
+          ansible_host: 10.20.0.12
+          wazuh_node_ip: 10.20.0.12
+          wazuh_indexer_name: indexer-2
+        idx-3:
+          ansible_host: 10.20.0.13
+          wazuh_node_ip: 10.20.0.13
+          wazuh_indexer_name: indexer-3
+
+    wazuh_managers:
+      hosts:
+        mgr-1:
+          ansible_host: 10.20.0.21
+          wazuh_node_ip: 10.20.0.21
+          wazuh_manager_name: manager-1
+          wazuh_manager_type: master
+        mgr-2:
+          ansible_host: 10.20.0.22
+          wazuh_node_ip: 10.20.0.22
+          wazuh_manager_name: manager-2
+          wazuh_manager_type: worker
+        mgr-3:
+          ansible_host: 10.20.0.23
+          wazuh_node_ip: 10.20.0.23
+          wazuh_manager_name: manager-3
+          wazuh_manager_type: worker
+
+    wazuh_dashboards:
+      hosts:
+        dash-1:
+          ansible_host: 10.20.0.31
+          wazuh_node_ip: 10.20.0.31
+          wazuh_dashboard_name: dashboard-1
+        dash-2:
+          ansible_host: 10.20.0.32
+          wazuh_node_ip: 10.20.0.32
+          wazuh_dashboard_name: dashboard-2
+
+    wazuh_loadbalancers:
+      hosts:
+        lb-1:
+          ansible_host: 10.20.0.41
+          wazuh_node_ip: 10.20.0.41
+          keepalived_priority: 120
+        lb-2:
+          ansible_host: 10.20.0.42
+          wazuh_node_ip: 10.20.0.42
+          keepalived_priority: 110

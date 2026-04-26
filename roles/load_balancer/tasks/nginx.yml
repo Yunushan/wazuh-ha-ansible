@@ -1,0 +1,40 @@
+---
+- name: Determine NGINX package family key
+  ansible.builtin.set_fact:
+    wazuh_lb_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_nginx_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_nginx_packages_by_family else ansible_os_family) }}"
+
+- name: Install NGINX packages
+  ansible.builtin.package:
+    name: "{{ wazuh_nginx_packages_by_family.get(wazuh_lb_package_family_key, ['nginx']) }}"
+    state: present
+
+- name: Create NGINX stream config directory
+  ansible.builtin.file:
+    path: /etc/nginx/stream.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Place Wazuh NGINX stream configuration
+  ansible.builtin.template:
+    src: nginx-wazuh-stream.conf.j2
+    dest: /etc/nginx/stream.d/wazuh.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart nginx
+
+- name: Ensure nginx.conf includes stream.d directory
+  ansible.builtin.lineinfile:
+    path: /etc/nginx/nginx.conf
+    regexp: '^include /etc/nginx/stream.d/\*.conf;'
+    line: 'include /etc/nginx/stream.d/*.conf;'
+    insertafter: EOF
+  notify: Restart nginx
+
+- name: Enable and start NGINX
+  ansible.builtin.service:
+    name: nginx
+    enabled: true
+    state: started

@@ -1,0 +1,29 @@
+---
+- name: Determine package family key
+  ansible.builtin.set_fact:
+    wazuh_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_common_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_common_packages_by_family else ansible_os_family) }}"
+
+- name: Install common packages
+  ansible.builtin.package:
+    name: "{{ wazuh_common_packages_by_family.get(wazuh_package_family_key, ['bash', 'curl', 'tar', 'gzip', 'ca-certificates', 'openssl', 'python3', 'sudo']) }}"
+    state: present
+  register: wazuh_common_pkg_result
+  retries: 3
+  delay: 5
+  until: wazuh_common_pkg_result is succeeded
+
+- name: Ensure Wazuh work directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_install_workdir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Configure vm.max_map_count for indexer nodes
+  ansible.posix.sysctl:
+    name: vm.max_map_count
+    value: "262144"
+    state: present
+    reload: true
+  when: "'wazuh_indexers' in group_names"

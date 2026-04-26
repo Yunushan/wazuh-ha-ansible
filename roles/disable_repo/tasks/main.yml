@@ -1,0 +1,22 @@
+---
+- name: Disable Wazuh apt repository
+  ansible.builtin.replace:
+    path: /etc/apt/sources.list.d/wazuh.list
+    regexp: '^deb '
+    replace: '#deb '
+  when: ansible_os_family == 'Debian'
+  failed_when: false
+
+- name: Refresh apt cache after disabling Wazuh repo
+  ansible.builtin.apt:
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+  failed_when: false
+
+- name: Disable Wazuh yum/dnf repository
+  ansible.builtin.replace:
+    path: /etc/yum.repos.d/wazuh.repo
+    regexp: '^enabled=1'
+    replace: 'enabled=0'
+  when: ansible_os_family == 'RedHat'
+  failed_when: false

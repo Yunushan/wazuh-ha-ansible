@@ -1,0 +1,18 @@
+---
+- name: Validate load balancer engine
+  ansible.builtin.assert:
+    that:
+      - wazuh_load_balancer_engine in ['haproxy', 'nginx', 'none']
+    fail_msg: "wazuh_load_balancer_engine must be haproxy, nginx, or none."
+
+- name: Configure HAProxy load balancer
+  ansible.builtin.include_tasks: haproxy.yml
+  when: wazuh_load_balancer_engine == 'haproxy'
+
+- name: Configure NGINX stream load balancer
+  ansible.builtin.include_tasks: nginx.yml
+  when: wazuh_load_balancer_engine == 'nginx'
+
+- name: Configure Keepalived VIP
+  ansible.builtin.include_tasks: keepalived.yml
+  when: wazuh_enable_keepalived | default(false) | bool

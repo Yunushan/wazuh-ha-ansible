@@ -1,0 +1,8 @@
+---
+- name: Preflight checks and common preparation
+  hosts: all_wazuh_nodes:wazuh_loadbalancers
+  become: true
+  gather_facts: true
+  roles:
+    - role: preflight
+    - role: common

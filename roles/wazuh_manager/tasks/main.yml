@@ -1,0 +1,31 @@
+---
+- name: Validate manager node type
+  ansible.builtin.assert:
+    that:
+      - wazuh_manager_type | default('worker') in ['master', 'worker']
+    fail_msg: "wazuh_manager_type must be master or worker."
+
+- name: Install Wazuh manager component
+  ansible.builtin.command:
+    cmd: "bash ./wazuh-install.sh --wazuh-server {{ wazuh_manager_name | default(inventory_hostname ~ '-manager') }}"
+    chdir: "{{ wazuh_install_workdir }}"
+    creates: /var/ossec/etc/ossec.conf
+  register: wazuh_manager_install
+  no_log: true
+
+- name: Ensure Wazuh manager service is enabled and started
+  ansible.builtin.service:
+    name: wazuh-manager
+    enabled: true
+    state: started
+
+- name: Ensure Filebeat service is enabled and started
+  ansible.builtin.service:
+    name: filebeat
+    enabled: true
+    state: started
+
+- name: Disable Wazuh package repository after manager install
+  ansible.builtin.include_role:
+    name: disable_repo
+  when: wazuh_disable_repo_after_install | default(true) | bool

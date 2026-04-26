@@ -1,0 +1,25 @@
+---
+- name: Ensure Wazuh work directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_install_workdir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Copy Wazuh installation assistant
+  ansible.builtin.copy:
+    src: "{{ wazuh_controller_artifacts_dir }}/wazuh-install.sh"
+    dest: "{{ wazuh_install_workdir }}/wazuh-install.sh"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Copy Wazuh generated installation bundle
+  ansible.builtin.copy:
+    src: "{{ wazuh_controller_artifacts_dir }}/wazuh-install-files.tar"
+    dest: "{{ wazuh_install_workdir }}/wazuh-install-files.tar"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true

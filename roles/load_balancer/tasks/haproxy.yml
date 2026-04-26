@@ -1,0 +1,24 @@
+---
+- name: Determine HAProxy package family key
+  ansible.builtin.set_fact:
+    wazuh_lb_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_haproxy_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_haproxy_packages_by_family else ansible_os_family) }}"
+
+- name: Install HAProxy
+  ansible.builtin.package:
+    name: "{{ wazuh_haproxy_packages_by_family.get(wazuh_lb_package_family_key, ['haproxy']) }}"
+    state: present
+
+- name: Configure HAProxy for Wazuh
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart haproxy
+
+- name: Enable and start HAProxy
+  ansible.builtin.service:
+    name: haproxy
+    enabled: true
+    state: started

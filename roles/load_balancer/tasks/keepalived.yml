@@ -1,0 +1,30 @@
+---
+- name: Require VIP when Keepalived is enabled
+  ansible.builtin.assert:
+    that:
+      - wazuh_lb_virtual_ip | default('') | length > 0
+    fail_msg: "Set wazuh_lb_virtual_ip when wazuh_enable_keepalived=true."
+
+- name: Determine Keepalived package family key
+  ansible.builtin.set_fact:
+    wazuh_keepalived_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_keepalived_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_keepalived_packages_by_family else ansible_os_family) }}"
+
+- name: Install Keepalived
+  ansible.builtin.package:
+    name: "{{ wazuh_keepalived_packages_by_family.get(wazuh_keepalived_package_family_key, ['keepalived']) }}"
+    state: present
+
+- name: Configure Keepalived
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart keepalived
+
+- name: Enable and start Keepalived
+  ansible.builtin.service:
+    name: keepalived
+    enabled: true
+    state: started

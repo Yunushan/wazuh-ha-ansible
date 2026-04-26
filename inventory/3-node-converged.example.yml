@@ -1,0 +1,89 @@
+---
+# Default 3-node converged Wazuh HA topology.
+# Replace IP addresses, SSH users, and the VIP before production use.
+
+all:
+  vars:
+    ansible_user: ubuntu
+    ansible_become: true
+
+    wazuh_version: "4.14"
+    wazuh_install_workdir: "/opt/wazuh-ha-install"
+    wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
+
+    # full|generate|install can be used by custom pipelines.
+    wazuh_deployment_mode: "full"
+
+    # For community/best-effort distributions. Keep false for strict production.
+    wazuh_allow_unsupported_distros: false
+
+    # Load balancer options: haproxy, nginx, none.
+    wazuh_load_balancer_engine: "haproxy"
+    wazuh_enable_keepalived: true
+    wazuh_lb_virtual_ip: "10.10.10.50/24"
+    wazuh_keepalived_interface: "eth0"
+    wazuh_keepalived_router_id: 51
+    wazuh_keepalived_auth_pass: "CHANGE_ME_42"
+
+    wazuh_dashboard_port: 443
+    wazuh_lb_dashboard_frontend_port: 443
+    wazuh_lb_expose_indexer_api: false
+
+    # Manager traffic policy.
+    wazuh_lb_1514_to_workers_only: true
+
+  children:
+    wazuh_generator:
+      hosts:
+        wazuh-a:
+
+    all_wazuh_nodes:
+      hosts:
+        wazuh-a:
+        wazuh-b:
+        wazuh-c:
+
+    wazuh_indexers:
+      hosts:
+        wazuh-a:
+          ansible_host: 10.10.10.11
+          wazuh_node_ip: 10.10.10.11
+          wazuh_indexer_name: indexer-1
+        wazuh-b:
+          ansible_host: 10.10.10.12
+          wazuh_node_ip: 10.10.10.12
+          wazuh_indexer_name: indexer-2
+        wazuh-c:
+          ansible_host: 10.10.10.13
+          wazuh_node_ip: 10.10.10.13
+          wazuh_indexer_name: indexer-3
+
+    wazuh_managers:
+      hosts:
+        wazuh-a:
+          wazuh_manager_name: manager-1
+          wazuh_manager_type: master
+        wazuh-b:
+          wazuh_manager_name: manager-2
+          wazuh_manager_type: worker
+        wazuh-c:
+          wazuh_manager_name: manager-3
+          wazuh_manager_type: worker
+
+    wazuh_dashboards:
+      hosts:
+        wazuh-a:
+          wazuh_dashboard_name: dashboard-1
+        wazuh-b:
+          wazuh_dashboard_name: dashboard-2
+        wazuh-c:
+          wazuh_dashboard_name: dashboard-3
+
+    wazuh_loadbalancers:
+      hosts:
+        wazuh-a:
+          keepalived_priority: 120
+        wazuh-b:
+          keepalived_priority: 110
+        wazuh-c:
+          keepalived_priority: 100

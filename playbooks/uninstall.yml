@@ -1,0 +1,23 @@
+---
+- name: Best-effort uninstall using Wazuh installation assistant
+  hosts: all_wazuh_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Confirm uninstall flag is set
+      ansible.builtin.assert:
+        that:
+          - wazuh_confirm_uninstall | default(false) | bool
+        fail_msg: "Set -e wazuh_confirm_uninstall=true to uninstall Wazuh components."
+
+    - name: Run Wazuh assistant uninstall
+      ansible.builtin.command:
+        cmd: bash ./wazuh-install.sh --uninstall
+        chdir: "{{ wazuh_install_workdir }}"
+      register: wazuh_uninstall_result
+      changed_when: true
+      failed_when: false
+
+    - name: Show uninstall result
+      ansible.builtin.debug:
+        var: wazuh_uninstall_result.stdout_lines

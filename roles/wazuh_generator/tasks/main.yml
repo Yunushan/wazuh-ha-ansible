@@ -1,0 +1,51 @@
+---
+- name: Ensure local artifact directory exists on controller
+  ansible.builtin.file:
+    path: "{{ wazuh_controller_artifacts_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Render Wazuh installation assistant config.yml
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "{{ wazuh_install_workdir }}/config.yml"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Download Wazuh installation assistant
+  ansible.builtin.get_url:
+    url: "https://packages.wazuh.com/{{ wazuh_version }}/wazuh-install.sh"
+    dest: "{{ wazuh_install_workdir }}/wazuh-install.sh"
+    mode: "0700"
+    force: true
+
+- name: Generate Wazuh certificates, cluster key, and passwords
+  ansible.builtin.command:
+    cmd: bash ./wazuh-install.sh --generate-config-files
+    chdir: "{{ wazuh_install_workdir }}"
+    creates: "{{ wazuh_install_workdir }}/wazuh-install-files.tar"
+  register: wazuh_generate_result
+  no_log: true
+
+- name: Fetch generated Wazuh installation bundle to controller
+  ansible.builtin.fetch:
+    src: "{{ wazuh_install_workdir }}/wazuh-install-files.tar"
+    dest: "{{ wazuh_controller_artifacts_dir }}/wazuh-install-files.tar"
+    flat: true
+  no_log: true
+
+- name: Fetch Wazuh installation assistant to controller
+  ansible.builtin.fetch:
+    src: "{{ wazuh_install_workdir }}/wazuh-install.sh"
+    dest: "{{ wazuh_controller_artifacts_dir }}/wazuh-install.sh"
+    flat: true
+
+- name: Fetch rendered config to controller for audit
+  ansible.builtin.fetch:
+    src: "{{ wazuh_install_workdir }}/config.yml"
+    dest: "{{ wazuh_controller_artifacts_dir }}/config.yml"
+    flat: true
+  no_log: true

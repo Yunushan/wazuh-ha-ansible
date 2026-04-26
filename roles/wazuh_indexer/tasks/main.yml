@@ -1,0 +1,19 @@
+---
+- name: Install Wazuh indexer component
+  ansible.builtin.command:
+    cmd: "bash ./wazuh-install.sh --wazuh-indexer {{ wazuh_indexer_name | default(inventory_hostname ~ '-indexer') }}"
+    chdir: "{{ wazuh_install_workdir }}"
+    creates: /etc/wazuh-indexer/opensearch.yml
+  register: wazuh_indexer_install
+  no_log: true
+
+- name: Ensure Wazuh indexer service is enabled and started
+  ansible.builtin.service:
+    name: wazuh-indexer
+    enabled: true
+    state: started
+
+- name: Disable Wazuh package repository after indexer install
+  ansible.builtin.include_role:
+    name: disable_repo
+  when: wazuh_disable_repo_after_install | default(true) | bool

@@ -1,0 +1,11 @@
+---
+- name: Install Wazuh dashboard nodes
+  hosts: wazuh_dashboards
+  become: true
+  gather_facts: true
+  serial: "{{ wazuh_dashboard_serial | default(1) }}"
+  roles:
+    - role: preflight
+    - role: common
+    - role: wazuh_distribute
+    - role: wazuh_dashboard

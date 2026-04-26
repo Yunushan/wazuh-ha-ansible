@@ -1,0 +1,11 @@
+---
+- name: Install Wazuh manager master and workers
+  hosts: wazuh_managers
+  become: true
+  gather_facts: true
+  serial: "{{ wazuh_manager_serial | default(1) }}"
+  roles:
+    - role: preflight
+    - role: common
+    - role: wazuh_distribute
+    - role: wazuh_manager

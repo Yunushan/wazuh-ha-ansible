@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Ansible
+*.retry
+.ansible/
+
+# Generated Wazuh secrets and installation bundles
+.secure/
+wazuh-install-files.tar
+wazuh-certificates.tar
+wazuh-passwords.txt
+*.pem
+*.key
+*.crt
+
+# Local inventories and overrides
+inventory/production*.yml
+inventory/production*.yaml
+inventory/production*.ini
+inventory/group_vars/*/vault.yml
+*.vault.yml
+
+# Logs and temporary files
+*.log
+*.tmp
+.DS_Store
+.idea/
+.vscode/
+
+# Build artifacts
+build/
+dist/
+*.zip

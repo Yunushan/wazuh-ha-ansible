@@ -1,0 +1,18 @@
+---
+- name: Install Wazuh indexer nodes
+  hosts: wazuh_indexers
+  become: true
+  gather_facts: true
+  serial: "{{ wazuh_indexer_serial | default(1) }}"
+  roles:
+    - role: preflight
+    - role: common
+    - role: wazuh_distribute
+    - role: wazuh_indexer
+
+- name: Initialize Wazuh indexer cluster once
+  hosts: "{{ groups['wazuh_indexers'][0] }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: wazuh_indexer_init

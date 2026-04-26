@@ -1,0 +1,19 @@
+nodes:
+  indexer:
+{% for host in groups.get('wazuh_indexers', []) %}
+    - name: {{ hostvars[host].wazuh_indexer_name | default(host ~ '-indexer') }}
+      ip: "{{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}"
+{% endfor %}
+
+  server:
+{% for host in groups.get('wazuh_managers', []) %}
+    - name: {{ hostvars[host].wazuh_manager_name | default(host ~ '-manager') }}
+      ip: "{{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}"
+      node_type: {{ hostvars[host].wazuh_manager_type | default('worker') }}
+{% endfor %}
+
+  dashboard:
+{% for host in groups.get('wazuh_dashboards', []) %}
+    - name: {{ hostvars[host].wazuh_dashboard_name | default(host ~ '-dashboard') }}
+      ip: "{{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}"
+{% endfor %}

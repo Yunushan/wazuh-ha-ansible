@@ -1,0 +1,25 @@
+---
+- name: Build dashboard installer command
+  ansible.builtin.set_fact:
+    wazuh_dashboard_install_command: >-
+      bash ./wazuh-install.sh --wazuh-dashboard {{ wazuh_dashboard_name | default(inventory_hostname ~ '-dashboard') }}
+      {% if wazuh_dashboard_port | default(443) | int != 443 %}-p {{ wazuh_dashboard_port }}{% endif %}
+
+- name: Install Wazuh dashboard component
+  ansible.builtin.command:
+    cmd: "{{ wazuh_dashboard_install_command }}"
+    chdir: "{{ wazuh_install_workdir }}"
+    creates: /etc/wazuh-dashboard/opensearch_dashboards.yml
+  register: wazuh_dashboard_install
+  no_log: true
+
+- name: Ensure Wazuh dashboard service is enabled and started
+  ansible.builtin.service:
+    name: wazuh-dashboard
+    enabled: true
+    state: started
+
+- name: Disable Wazuh package repository after dashboard install
+  ansible.builtin.include_role:
+    name: disable_repo
+  when: wazuh_disable_repo_after_install | default(true) | bool

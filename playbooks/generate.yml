@@ -1,0 +1,9 @@
+---
+- name: Generate Wazuh installer configuration and certificate bundle
+  hosts: wazuh_generator
+  become: true
+  gather_facts: true
+  roles:
+    - role: preflight
+    - role: common
+    - role: wazuh_generator

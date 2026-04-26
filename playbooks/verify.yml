@@ -1,0 +1,64 @@
+---
+- name: Verify Wazuh indexer ports
+  hosts: wazuh_indexers
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Wait for indexer API port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        port: 9200
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+- name: Verify Wazuh manager ports
+  hosts: wazuh_managers
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Wait for Wazuh agent event port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        port: 1514
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+    - name: Wait for Wazuh API port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        port: 55000
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+- name: Verify Wazuh dashboard ports
+  hosts: wazuh_dashboards
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Wait for dashboard HTTPS port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        port: "{{ wazuh_dashboard_port | default(443) }}"
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+- name: Verify load balancer VIP or node ports
+  hosts: wazuh_loadbalancers
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Select load balancer check host
+      ansible.builtin.set_fact:
+        wazuh_lb_check_host: "{{ (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) if (wazuh_enable_keepalived | default(false) | bool and wazuh_lb_virtual_ip | default('') | length > 0) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
+
+    - name: Wait for load-balanced agent event port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_lb_check_host }}"
+        port: 1514
+        timeout: 20
+      delegate_to: localhost
+      become: false

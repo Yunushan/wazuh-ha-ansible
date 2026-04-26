@@ -1,0 +1,132 @@
+---
+# Global defaults. Inventory files can override these values.
+
+wazuh_version: "4.14"
+wazuh_install_workdir: "/opt/wazuh-ha-install"
+wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
+
+wazuh_allow_unsupported_distros: false
+wazuh_disable_repo_after_install: true
+wazuh_indexer_serial: 1
+wazuh_manager_serial: 1
+wazuh_dashboard_serial: 1
+
+wazuh_dashboard_port: 443
+wazuh_load_balancer_engine: "haproxy"
+wazuh_enable_keepalived: false
+wazuh_lb_virtual_ip: ""
+wazuh_keepalived_interface: "eth0"
+wazuh_keepalived_router_id: 51
+wazuh_keepalived_auth_pass: "CHANGE_ME"
+wazuh_lb_dashboard_frontend_port: 443
+wazuh_lb_1514_to_workers_only: true
+wazuh_lb_expose_indexer_api: false
+
+# Official central-component OS list reflected from current Wazuh docs.
+wazuh_official_central_os:
+  Amazon: ["2", "2023"]
+  Amazon Linux: ["2", "2023"]
+  CentOS: ["10"]
+  CentOS Stream: ["10"]
+  RedHat: ["7", "8", "9", "10"]
+  Red Hat Enterprise Linux: ["7", "8", "9", "10"]
+  Ubuntu: ["16", "18", "20", "22", "24"]
+
+# Requested but not claimed as official central-component targets.
+wazuh_community_central_os:
+  Debian: ["11", "12", "13"]
+  Rocky: ["7", "8", "9", "10"]
+  Rocky Linux: ["7", "8", "9", "10"]
+  AlmaLinux: ["7", "8", "9", "10"]
+  Alma Linux: ["7", "8", "9", "10"]
+  OracleLinux: ["7", "8", "9", "10"]
+  Oracle Linux: ["7", "8", "9", "10"]
+  Fedora: ["42", "43"]
+  Archlinux: ["rolling"]
+  Arch Linux: ["rolling"]
+  Manjaro: ["rolling"]
+  Kali: ["rolling"]
+  Kali Linux: ["rolling"]
+  Alpine: ["rolling"]
+  Alpine Linux: ["rolling"]
+  Parrot: ["rolling"]
+  Parrot Linux: ["rolling"]
+  Tails: ["rolling"]
+  Tails Linux: ["rolling"]
+  Qubes: ["rolling"]
+  Qubes OS: ["rolling"]
+
+wazuh_common_packages_by_family:
+  Debian:
+    - bash
+    - curl
+    - tar
+    - gzip
+    - ca-certificates
+    - gnupg
+    - apt-transport-https
+    - openssl
+    - python3
+    - sudo
+    - procps
+  RedHat:
+    - bash
+    - curl
+    - tar
+    - gzip
+    - ca-certificates
+    - gnupg2
+    - openssl
+    - python3
+    - sudo
+    - procps-ng
+  Suse:
+    - bash
+    - curl
+    - tar
+    - gzip
+    - ca-certificates
+    - gpg2
+    - openssl
+    - python3
+    - sudo
+  Alpine:
+    - bash
+    - curl
+    - tar
+    - gzip
+    - ca-certificates
+    - gnupg
+    - openssl
+    - python3
+    - sudo
+    - procps
+  Archlinux:
+    - bash
+    - curl
+    - tar
+    - gzip
+    - ca-certificates
+    - gnupg
+    - openssl
+    - python
+    - sudo
+    - procps-ng
+
+wazuh_haproxy_packages_by_family:
+  Debian: ["haproxy"]
+  RedHat: ["haproxy"]
+  Alpine: ["haproxy"]
+  Archlinux: ["haproxy"]
+
+wazuh_nginx_packages_by_family:
+  Debian: ["nginx", "libnginx-mod-stream"]
+  RedHat: ["nginx"]
+  Alpine: ["nginx"]
+  Archlinux: ["nginx"]
+
+wazuh_keepalived_packages_by_family:
+  Debian: ["keepalived"]
+  RedHat: ["keepalived"]
+  Alpine: ["keepalived"]
+  Archlinux: ["keepalived"]

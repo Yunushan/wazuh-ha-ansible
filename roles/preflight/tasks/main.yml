@@ -1,0 +1,46 @@
+---
+- name: Require Linux targets
+  ansible.builtin.assert:
+    that:
+      - ansible_system == "Linux"
+    fail_msg: "This project targets Linux hosts only."
+
+- name: Require supported CPU architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture in ['x86_64', 'amd64', 'aarch64', 'arm64']
+    fail_msg: "Wazuh central components require x86_64/AMD64 or AARCH64/ARM64 architecture. Detected {{ ansible_architecture }}."
+
+- name: Build detected version facts
+  ansible.builtin.set_fact:
+    wazuh_detected_distribution: "{{ ansible_distribution }}"
+    wazuh_detected_major_version: "{{ ansible_distribution_major_version | string }}"
+    wazuh_detected_full_version: "{{ ansible_distribution_version | string }}"
+
+- name: Determine official/community version lists
+  ansible.builtin.set_fact:
+    wazuh_detected_official_versions: "{{ wazuh_official_central_os.get(wazuh_detected_distribution, []) }}"
+    wazuh_detected_community_versions: "{{ wazuh_community_central_os.get(wazuh_detected_distribution, []) }}"
+
+- name: Determine Wazuh support status for this host
+  ansible.builtin.set_fact:
+    wazuh_central_support_status: "{{ 'official' if (wazuh_detected_major_version in wazuh_detected_official_versions or wazuh_detected_full_version in wazuh_detected_official_versions) else ('community' if ('rolling' in wazuh_detected_community_versions or wazuh_detected_major_version in wazuh_detected_community_versions or wazuh_detected_full_version in wazuh_detected_community_versions) else 'unsupported') }}"
+
+- name: Block unsupported central-component distribution unless explicitly allowed
+  ansible.builtin.assert:
+    that:
+      - wazuh_central_support_status != 'unsupported' or wazuh_allow_unsupported_distros | bool
+    fail_msg: >-
+      {{ ansible_distribution }} {{ ansible_distribution_version }} is not in the official or community matrix.
+      Set wazuh_allow_unsupported_distros=true only for lab or best-effort testing.
+
+- name: Warn for community targets
+  ansible.builtin.debug:
+    msg: >-
+      {{ ansible_distribution }} {{ ansible_distribution_version }} is a community/best-effort central-component target in this project.
+      It is not claimed as an official Wazuh central-component target here.
+  when: wazuh_central_support_status == 'community'
+
+- name: Show detected platform
+  ansible.builtin.debug:
+    msg: "Detected {{ ansible_distribution }} {{ ansible_distribution_version }} / {{ ansible_architecture }} / support={{ wazuh_central_support_status }}"
