@@ -15,6 +15,13 @@
     group: root
     mode: "0600"
 
+- name: Fetch rendered config to controller for audit
+  ansible.builtin.fetch:
+    src: "{{ wazuh_install_workdir }}/config.yml"
+    dest: "{{ wazuh_controller_artifacts_dir }}/config.yml"
+    flat: true
+  no_log: true
+
 - name: Download Wazuh installation assistant
   ansible.builtin.get_url:
     url: "{{ wazuh_install_assistant_url }}"
@@ -70,10 +77,3 @@
     src: "{{ wazuh_install_workdir }}/wazuh-install.sh"
     dest: "{{ wazuh_controller_artifacts_dir }}/wazuh-install.sh"
     flat: true
-
-- name: Fetch rendered config to controller for audit
-  ansible.builtin.fetch:
-    src: "{{ wazuh_install_workdir }}/config.yml"
-    dest: "{{ wazuh_controller_artifacts_dir }}/config.yml"
-    flat: true
-  no_log: true
