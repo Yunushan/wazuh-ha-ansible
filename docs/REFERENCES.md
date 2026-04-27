@@ -22,11 +22,20 @@ Important notes reflected in this repository:
 Upstream URLs are intentionally not hardcoded into every role except the official package endpoint used by the installer:
 
 ```text
-https://packages.wazuh.com/<version>/wazuh-install.sh
+https://packages.wazuh.com/<major.minor>/wazuh-install.sh
 ```
 
-Default version in this project:
+Default version selector in this project:
 
 ```yaml
-wazuh_version: "4.14"
+wazuh_version: "stable"
+wazuh_stable_version: "4.14"
+wazuh_latest_version: "4.14"
 ```
+
+Supported `wazuh_version` values:
+
+- `stable`: resolves through `wazuh_stable_version`.
+- `latest`: resolves through `wazuh_latest_version`.
+- `4.14`: downloads the `4.14` assistant channel and installs the latest patch available in that channel.
+- `4.14.5`: downloads the `4.14` assistant channel, then pins the assistant package version to `4.14.5`.

@@ -13,10 +13,14 @@ This project defaults to the online Wazuh installation assistant flow. For restr
 ## Variables to review
 
 ```yaml
-wazuh_version: "4.14"
+wazuh_version: "stable"
+wazuh_stable_version: "4.14"
+wazuh_latest_version: "4.14"
 wazuh_install_workdir: "/opt/wazuh-ha-install"
 wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
 ```
+
+`wazuh_version` accepts `stable`, `latest`, a major.minor channel such as `4.14`, or an exact patch such as `4.14.5`. Exact patch selections use the major.minor assistant channel and pin the downloaded assistant before it is copied to the Wazuh nodes.
 
 ## Production advice
 

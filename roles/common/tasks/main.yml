@@ -1,4 +1,28 @@
 ---
+- name: Normalize Wazuh version selector
+  ansible.builtin.set_fact:
+    wazuh_version_selector: "{{ wazuh_version | string | trim }}"
+    wazuh_version_selector_normalized: "{{ wazuh_version | string | trim | lower }}"
+
+- name: Resolve Wazuh version selector
+  ansible.builtin.set_fact:
+    wazuh_resolved_version: "{{ (wazuh_stable_version if wazuh_version_selector_normalized == 'stable' else wazuh_latest_version if wazuh_version_selector_normalized == 'latest' else wazuh_version_selector) | string | trim }}"
+
+- name: Validate Wazuh version selector
+  ansible.builtin.assert:
+    that:
+      - wazuh_version_selector_normalized in ['stable', 'latest'] or wazuh_version_selector is match('^[0-9]+[.][0-9]+([.][0-9]+)?$')
+      - wazuh_resolved_version is match('^[0-9]+[.][0-9]+([.][0-9]+)?$')
+    fail_msg: >-
+      wazuh_version must be stable, latest, a channel such as 4.14, or an exact patch such as 4.14.5.
+      If using stable/latest, set wazuh_stable_version or wazuh_latest_version to a numeric channel or exact patch.
+
+- name: Build Wazuh installer version facts
+  ansible.builtin.set_fact:
+    wazuh_version_channel: "{{ wazuh_resolved_version | regex_replace('^([0-9]+[.][0-9]+)([.][0-9]+)?$', '\\1') }}"
+    wazuh_version_is_exact: "{{ wazuh_resolved_version is match('^[0-9]+[.][0-9]+[.][0-9]+$') }}"
+    wazuh_install_assistant_url: "{{ wazuh_packages_base_url | regex_replace('/+$', '') }}/{{ wazuh_resolved_version | regex_replace('^([0-9]+[.][0-9]+)([.][0-9]+)?$', '\\1') }}/wazuh-install.sh"
+
 - name: Determine package family key
   ansible.builtin.set_fact:
     wazuh_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_common_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_common_packages_by_family else ansible_os_family) }}"

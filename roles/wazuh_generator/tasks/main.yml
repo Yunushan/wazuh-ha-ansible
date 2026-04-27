@@ -17,10 +17,38 @@
 
 - name: Download Wazuh installation assistant
   ansible.builtin.get_url:
-    url: "https://packages.wazuh.com/{{ wazuh_version }}/wazuh-install.sh"
+    url: "{{ wazuh_install_assistant_url }}"
     dest: "{{ wazuh_install_workdir }}/wazuh-install.sh"
     mode: "0700"
     force: true
+
+- name: Pin Wazuh assistant major.minor channel for exact patch requests
+  ansible.builtin.replace:
+    path: "{{ wazuh_install_workdir }}/wazuh-install.sh"
+    regexp: '(?m)^readonly wazuh_major="[0-9]+[.][0-9]+"$'
+    replace: 'readonly wazuh_major="{{ wazuh_version_channel }}"'
+  when: wazuh_version_is_exact | bool
+
+- name: Pin Wazuh assistant package version for exact patch requests
+  ansible.builtin.replace:
+    path: "{{ wazuh_install_workdir }}/wazuh-install.sh"
+    regexp: '(?m)^readonly wazuh_version="[0-9]+[.][0-9]+[.][0-9]+"$'
+    replace: 'readonly wazuh_version="{{ wazuh_resolved_version }}"'
+  when: wazuh_version_is_exact | bool
+
+- name: Read pinned Wazuh assistant for verification
+  ansible.builtin.slurp:
+    src: "{{ wazuh_install_workdir }}/wazuh-install.sh"
+  register: wazuh_install_assistant_content
+  when: wazuh_version_is_exact | bool
+
+- name: Verify exact Wazuh package pin
+  ansible.builtin.assert:
+    that:
+      - (wazuh_install_assistant_content.content | b64decode | regex_search('(?m)^readonly wazuh_version="' ~ (wazuh_resolved_version | regex_escape) ~ '"$')) is not none
+      - (wazuh_install_assistant_content.content | b64decode | regex_search('(?m)^readonly wazuh_major="' ~ (wazuh_version_channel | regex_escape) ~ '"$')) is not none
+    fail_msg: "Downloaded Wazuh assistant could not be pinned to {{ wazuh_resolved_version }}."
+  when: wazuh_version_is_exact | bool
 
 - name: Generate Wazuh certificates, cluster key, and passwords
   ansible.builtin.command:

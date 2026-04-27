@@ -6,7 +6,10 @@ all:
   vars:
     ansible_user: ec2-user
     ansible_become: true
-    wazuh_version: "4.14"
+    # Version selector: stable, latest, a channel like 4.14, or an exact patch like 4.14.5.
+    wazuh_version: "stable"
+    wazuh_stable_version: "4.14"
+    wazuh_latest_version: "4.14"
     wazuh_install_workdir: "/opt/wazuh-ha-install"
     wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
     wazuh_allow_unsupported_distros: false

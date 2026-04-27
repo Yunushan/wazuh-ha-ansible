@@ -123,7 +123,25 @@ Change at least:
 - SSH user settings
 - `wazuh_lb_virtual_ip` if using Keepalived
 - dashboard port if needed
+- Wazuh version selector if needed
 - node names if you want a custom naming scheme
+
+Version selector examples:
+
+```yaml
+# Default stable channel selected by this project.
+wazuh_version: "stable"
+
+# Same current channel behavior, installs the latest patch available in 4.14.
+wazuh_version: "4.14"
+
+# Exact package patch pin. The playbook downloads the 4.14 assistant and pins it to 4.14.5 before distribution.
+wazuh_version: "4.14.5"
+
+# Alias targets can be overridden when Wazuh publishes a new channel.
+wazuh_stable_version: "4.14"
+wazuh_latest_version: "4.14"
+```
 
 ### 3. Run preflight
 

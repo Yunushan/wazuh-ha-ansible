@@ -1,7 +1,10 @@
 ---
 # Global defaults. Inventory files can override these values.
 
-wazuh_version: "4.14"
+wazuh_version: "stable"
+wazuh_stable_version: "4.14"
+wazuh_latest_version: "4.14"
+wazuh_packages_base_url: "https://packages.wazuh.com"
 wazuh_install_workdir: "/opt/wazuh-ha-install"
 wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
 
