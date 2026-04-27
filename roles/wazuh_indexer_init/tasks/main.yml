@@ -5,6 +5,13 @@
     port: 9200
     timeout: 120
 
+- name: Wait for all Wazuh indexer APIs before cluster initialization
+  ansible.builtin.wait_for:
+    host: "{{ hostvars[item].wazuh_node_ip | default(hostvars[item].ansible_host | default(item)) }}"
+    port: 9200
+    timeout: 180
+  loop: "{{ groups.get('wazuh_indexers', []) }}"
+
 - name: Initialize Wazuh indexer cluster once
   ansible.builtin.command:
     cmd: bash ./wazuh-install.sh --start-cluster
