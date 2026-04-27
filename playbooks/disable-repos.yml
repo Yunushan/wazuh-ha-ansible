@@ -1,0 +1,8 @@
+---
+- name: Disable Wazuh package repositories after component installation
+  hosts: all_wazuh_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - role: disable_repo
+      when: wazuh_disable_repo_after_install | default(true) | bool

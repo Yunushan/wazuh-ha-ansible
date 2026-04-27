@@ -266,6 +266,7 @@ wazuh-ha-ansible/
 | `playbooks/install-indexers.yml` | Install Wazuh indexers and initialize the cluster once |
 | `playbooks/install-managers.yml` | Install Wazuh manager master and workers |
 | `playbooks/install-dashboards.yml` | Install one or more Wazuh dashboard nodes |
+| `playbooks/disable-repos.yml` | Disable Wazuh package repositories after all Wazuh components are installed |
 | `playbooks/install-loadbalancers.yml` | Configure HAProxy or NGINX, optionally with Keepalived VIP |
 | `playbooks/verify.yml` | Perform basic port and service checks |
 | `playbooks/site.yml` | Full end-to-end deployment |

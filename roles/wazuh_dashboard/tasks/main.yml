@@ -18,8 +18,3 @@
     name: wazuh-dashboard
     enabled: true
     state: started
-
-- name: Disable Wazuh package repository after dashboard install
-  ansible.builtin.include_role:
-    name: disable_repo
-  when: wazuh_disable_repo_after_install | default(true) | bool
