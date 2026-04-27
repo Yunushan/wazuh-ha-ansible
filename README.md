@@ -155,6 +155,8 @@ ansible-playbook -i inventory/production.yml playbooks/preflight.yml --ask-becom
 ansible-playbook -i inventory/production.yml playbooks/site.yml --ask-become-pass
 ```
 
+For converged inventories where indexer, manager, and dashboard components share the same nodes, keep the Wazuh package repository enabled until every Wazuh component is installed. This project disables Wazuh repositories at the end of `playbooks/site.yml` through `playbooks/disable-repos.yml`. If you run component playbooks separately, run `playbooks/disable-repos.yml` only after the last Wazuh component playbook finishes.
+
 ### 5. Verify the deployment
 
 ```bash
@@ -282,7 +284,7 @@ wazuh-ha-ansible/
 - Restrict indexer API access to trusted networks.
 - Use a trusted TLS certificate for production dashboard access.
 - Place load balancers and Wazuh nodes behind firewalls/security groups.
-- Disable package repositories after installation if you do not want accidental upgrades.
+- Disable Wazuh package repositories after all Wazuh components are installed if you do not want accidental upgrades.
 - Test upgrades in staging before production.
 
 ---
