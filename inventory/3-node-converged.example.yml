@@ -19,6 +19,7 @@ all:
 
     # For community/best-effort distributions. Keep false for strict production.
     wazuh_allow_unsupported_distros: false
+    wazuh_fix_apt_http_sources: true
 
     # Load balancer options: haproxy, nginx, none.
     wazuh_load_balancer_engine: "haproxy"

@@ -13,6 +13,7 @@ all:
     wazuh_install_workdir: "/opt/wazuh-ha-install"
     wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
     wazuh_allow_unsupported_distros: false
+    wazuh_fix_apt_http_sources: true
     wazuh_load_balancer_engine: "haproxy"
     wazuh_enable_keepalived: true
     wazuh_lb_virtual_ip: "10.20.0.50/24"

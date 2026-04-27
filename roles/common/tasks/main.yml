@@ -27,6 +27,74 @@
   ansible.builtin.set_fact:
     wazuh_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_common_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_common_packages_by_family else ansible_os_family) }}"
 
+- name: Check legacy apt sources file
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list
+  register: wazuh_apt_sources_list_stat
+  when:
+    - ansible_os_family == 'Debian'
+    - wazuh_fix_apt_http_sources | default(true) | bool
+
+- name: Find apt source fragments
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns:
+      - "*.list"
+      - "*.sources"
+    file_type: file
+  register: wazuh_apt_source_fragments
+  when:
+    - ansible_os_family == 'Debian'
+    - wazuh_fix_apt_http_sources | default(true) | bool
+
+- name: Build apt source file list
+  ansible.builtin.set_fact:
+    wazuh_apt_source_files: "{{ ([{'path': '/etc/apt/sources.list'}] if wazuh_apt_sources_list_stat.stat.exists | default(false) else []) + (wazuh_apt_source_fragments.files | default([])) }}"
+  when:
+    - ansible_os_family == 'Debian'
+    - wazuh_fix_apt_http_sources | default(true) | bool
+
+- name: Repair Ubuntu security apt source URLs to HTTPS
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: 'http://security[.]ubuntu[.]com/ubuntu'
+    replace: 'https://security.ubuntu.com/ubuntu'
+  loop: "{{ wazuh_apt_source_files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: wazuh_apt_security_source_repair
+  when:
+    - ansible_os_family == 'Debian'
+    - wazuh_fix_apt_http_sources | default(true) | bool
+
+- name: Repair Ubuntu archive apt source URLs to HTTPS
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: 'http://archive[.]ubuntu[.]com/ubuntu'
+    replace: 'https://archive.ubuntu.com/ubuntu'
+  loop: "{{ wazuh_apt_source_files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: wazuh_apt_archive_source_repair
+  when:
+    - ansible_os_family == 'Debian'
+    - wazuh_fix_apt_http_sources | default(true) | bool
+
+- name: Refresh apt cache after repairing Ubuntu apt sources
+  ansible.builtin.apt:
+    update_cache: true
+  register: wazuh_apt_source_repair_update_result
+  retries: 3
+  delay: 5
+  until: wazuh_apt_source_repair_update_result is succeeded
+  when:
+    - ansible_os_family == 'Debian'
+    - wazuh_fix_apt_http_sources | default(true) | bool
+    - >-
+      (wazuh_apt_security_source_repair.results | default([]) | selectattr('changed') | list | length > 0)
+      or
+      (wazuh_apt_archive_source_repair.results | default([]) | selectattr('changed') | list | length > 0)
+
 - name: Install common packages
   ansible.builtin.package:
     name: "{{ wazuh_common_packages_by_family.get(wazuh_package_family_key, ['bash', 'curl', 'tar', 'gzip', 'ca-certificates', 'openssl', 'python3', 'sudo']) }}"

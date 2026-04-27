@@ -143,6 +143,12 @@ wazuh_stable_version: "4.14"
 wazuh_latest_version: "4.14"
 ```
 
+Ubuntu apt source repair is enabled by default. If an Ubuntu image still uses HTTP package sources, the common role rewrites official Ubuntu archive/security URLs to HTTPS before package installation:
+
+```yaml
+wazuh_fix_apt_http_sources: true
+```
+
 ### 3. Run preflight
 
 ```bash
@@ -284,6 +290,7 @@ wazuh-ha-ansible/
 - Restrict indexer API access to trusted networks.
 - Use a trusted TLS certificate for production dashboard access.
 - Place load balancers and Wazuh nodes behind firewalls/security groups.
+- Review apt source repair behavior before production if your environment requires a private Ubuntu mirror.
 - Disable Wazuh package repositories after all Wazuh components are installed if you do not want accidental upgrades.
 - Test upgrades in staging before production.
 

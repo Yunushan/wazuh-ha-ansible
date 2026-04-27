@@ -9,6 +9,7 @@ wazuh_install_workdir: "/opt/wazuh-ha-install"
 wazuh_controller_artifacts_dir: "{{ playbook_dir }}/../.secure/wazuh"
 
 wazuh_allow_unsupported_distros: false
+wazuh_fix_apt_http_sources: true
 wazuh_disable_repo_after_install: true
 wazuh_indexer_serial: 1
 wazuh_manager_serial: 1
