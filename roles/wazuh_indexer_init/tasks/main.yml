@@ -12,13 +12,57 @@
     timeout: 180
   loop: "{{ groups.get('wazuh_indexers', []) }}"
 
+- name: Set expected Wazuh indexer node count
+  ansible.builtin.set_fact:
+    wazuh_indexer_expected_nodes: "{{ groups.get('wazuh_indexers', []) | length }}"
+
+- name: Check whether Wazuh indexer cluster is already initialized
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_cluster/health"
+    method: GET
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    return_content: true
+  register: wazuh_indexer_health_before_init
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether Wazuh indexer cluster is already initialized
+  ansible.builtin.set_fact:
+    wazuh_indexer_cluster_already_initialized: "{{ (wazuh_indexer_health_before_init.status | default(0) | int == 200) and (((wazuh_indexer_health_before_init.json | default({})).get('number_of_nodes', 0) | int) >= (wazuh_indexer_expected_nodes | int)) }}"
+
 - name: Initialize Wazuh indexer cluster once
   ansible.builtin.command:
     cmd: bash ./wazuh-install.sh --start-cluster
     chdir: "{{ wazuh_install_workdir }}"
   register: wazuh_start_cluster_result
-  changed_when: true
+  changed_when: wazuh_start_cluster_result.rc == 0
+  failed_when: false
   no_log: true
+  when: not wazuh_indexer_cluster_already_initialized | bool
+
+- name: Check Wazuh indexer cluster health after initialization
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_cluster/health"
+    method: GET
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    return_content: true
+  register: wazuh_indexer_health_after_init
+  changed_when: false
+  failed_when: false
+
+- name: Validate Wazuh indexer cluster initialization
+  ansible.builtin.assert:
+    that:
+      - wazuh_indexer_health_after_init.status | default(0) | int == 200
+      - ((wazuh_indexer_health_after_init.json | default({})).get('number_of_nodes', 0) | int) >= (wazuh_indexer_expected_nodes | int)
+      - (wazuh_indexer_health_after_init.json | default({})).get('status', '') in ['green', 'yellow']
+    fail_msg: >-
+      Wazuh indexer cluster initialization could not be verified.
+      Check /var/log/wazuh-install.log on {{ inventory_hostname }} and confirm all indexers can reach each other on ports 9200 and 9300.
 
 - name: Wait for all indexer nodes to answer on 9200
   ansible.builtin.wait_for:
