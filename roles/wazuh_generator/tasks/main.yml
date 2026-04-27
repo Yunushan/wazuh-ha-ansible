@@ -7,6 +7,35 @@
   delegate_to: localhost
   become: false
 
+- name: Initialize Wazuh component name lists
+  ansible.builtin.set_fact:
+    wazuh_indexer_names_resolved: []
+    wazuh_manager_names_resolved: []
+    wazuh_dashboard_names_resolved: []
+
+- name: Build Wazuh indexer component name list
+  ansible.builtin.set_fact:
+    wazuh_indexer_names_resolved: "{{ wazuh_indexer_names_resolved + [hostvars[item].wazuh_indexer_name | default(item ~ '-indexer')] }}"
+  loop: "{{ groups.get('wazuh_indexers', []) }}"
+
+- name: Build Wazuh manager component name list
+  ansible.builtin.set_fact:
+    wazuh_manager_names_resolved: "{{ wazuh_manager_names_resolved + [hostvars[item].wazuh_manager_name | default(item ~ '-manager')] }}"
+  loop: "{{ groups.get('wazuh_managers', []) }}"
+
+- name: Build Wazuh dashboard component name list
+  ansible.builtin.set_fact:
+    wazuh_dashboard_names_resolved: "{{ wazuh_dashboard_names_resolved + [hostvars[item].wazuh_dashboard_name | default(item ~ '-dashboard')] }}"
+  loop: "{{ groups.get('wazuh_dashboards', []) }}"
+
+- name: Validate Wazuh component names are unique
+  ansible.builtin.assert:
+    that:
+      - (wazuh_indexer_names_resolved + wazuh_manager_names_resolved + wazuh_dashboard_names_resolved) | length == ((wazuh_indexer_names_resolved + wazuh_manager_names_resolved + wazuh_dashboard_names_resolved) | unique | list | length)
+    fail_msg: >-
+      Wazuh component names must be unique across indexer, manager, and dashboard sections.
+      Use component names like indexer-1, manager-1, and dashboard-1 even when they run on the same host.
+
 - name: Render Wazuh installation assistant config.yml
   ansible.builtin.template:
     src: config.yml.j2
