@@ -74,6 +74,13 @@
 - name: Apply pending load balancer handlers before verification
   ansible.builtin.meta: flush_handlers
 
+- name: Restart load balancer before listener verification
+  ansible.builtin.service:
+    name: "{{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
+    enabled: true
+    state: restarted
+  when: wazuh_load_balancer_engine != 'none'
+
 - name: Verify Keepalived remains active after handler flush
   ansible.builtin.command:
     cmd: systemctl is-active keepalived
