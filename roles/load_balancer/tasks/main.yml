@@ -58,3 +58,74 @@
 - name: Configure Keepalived VIP
   ansible.builtin.include_tasks: keepalived.yml
   when: wazuh_enable_keepalived | default(false) | bool
+
+- name: Apply pending load balancer handlers before verification
+  ansible.builtin.meta: flush_handlers
+
+- name: Build load balancer frontend port check list
+  ansible.builtin.set_fact:
+    wazuh_lb_frontend_ports_to_check: >-
+      {{
+        [
+          wazuh_lb_effective_agent_events_frontend_port | int,
+          wazuh_lb_effective_agent_enrollment_frontend_port | int,
+          wazuh_lb_effective_api_frontend_port | int,
+          wazuh_lb_effective_dashboard_frontend_port | int
+        ]
+        + ([wazuh_lb_effective_indexer_api_frontend_port | int] if (wazuh_lb_expose_indexer_api | default(false) | bool) else [])
+      }}
+  when: wazuh_load_balancer_engine != 'none'
+
+- name: Check load balancer service state after handler flush
+  ansible.builtin.command:
+    cmd: "systemctl is-active {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
+  register: wazuh_lb_service_state_after_flush
+  changed_when: false
+  failed_when: false
+  when: wazuh_load_balancer_engine != 'none'
+
+- name: Check load balancer listeners after handler flush
+  ansible.builtin.command:
+    cmd: ss -H -lntp
+  register: wazuh_lb_listeners_after_flush
+  changed_when: false
+  failed_when: false
+  when: wazuh_load_balancer_engine != 'none'
+
+- name: Report load balancer frontend listener state
+  ansible.builtin.debug:
+    msg: |
+      {{ inventory_hostname }} {{ wazuh_load_balancer_engine }} state={{ wazuh_lb_service_state_after_flush.stdout | default('unknown') }}
+      expected_frontend_ports={{ wazuh_lb_frontend_ports_to_check | default([]) }}
+      listeners:
+      {{ wazuh_lb_listeners_after_flush.stdout_lines | default([]) | select('search', ':(1514|1515|15140|15150|443|8443|55000|55001|9200|9201)\\b') | list | join('\n') }}
+  when: wazuh_load_balancer_engine != 'none'
+
+- name: Wait for load balancer frontend ports on node address
+  ansible.builtin.wait_for:
+    host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+    port: "{{ item }}"
+    timeout: 20
+  loop: "{{ wazuh_lb_frontend_ports_to_check | default([]) }}"
+  delegate_to: localhost
+  become: false
+  when: wazuh_load_balancer_engine != 'none'
+
+- name: Select load balancer VIP check host
+  ansible.builtin.set_fact:
+    wazuh_lb_vip_check_host: "{{ wazuh_lb_virtual_ip | regex_replace('/.*$', '') }}"
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_enable_keepalived | default(false) | bool
+    - wazuh_lb_virtual_ip | default('') | length > 0
+
+- name: Wait for load balancer dashboard frontend port on VIP
+  ansible.builtin.wait_for:
+    host: "{{ wazuh_lb_vip_check_host }}"
+    port: "{{ wazuh_lb_effective_dashboard_frontend_port }}"
+    timeout: 20
+  delegate_to: localhost
+  become: false
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_vip_check_host is defined
