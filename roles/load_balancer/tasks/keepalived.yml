@@ -5,6 +5,16 @@
       - wazuh_lb_virtual_ip | default('') | length > 0
     fail_msg: "Set wazuh_lb_virtual_ip when wazuh_enable_keepalived=true."
 
+- name: Require Keepalived auth password
+  ansible.builtin.assert:
+    that:
+      - wazuh_keepalived_auth_pass is defined
+      - wazuh_keepalived_auth_pass | string | length > 0
+      - wazuh_keepalived_auth_pass | string != 'CHANGE_ME'
+    fail_msg: >-
+      Set wazuh_keepalived_auth_pass to a shared VRRP password, or define
+      vault_wazuh_keepalived_auth_pass if your inventory references it.
+
 - name: Determine Keepalived package family key
   ansible.builtin.set_fact:
     wazuh_keepalived_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_keepalived_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_keepalived_packages_by_family else ansible_os_family) }}"
