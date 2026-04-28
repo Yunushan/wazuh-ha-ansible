@@ -1,5 +1,10 @@
+global_defs {
+    enable_script_security
+    script_user root
+}
+
 vrrp_script chk_lb {
-    script "pidof {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
+    script "/usr/bin/pgrep -x {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
     interval 2
     fall 2
     rise 2
