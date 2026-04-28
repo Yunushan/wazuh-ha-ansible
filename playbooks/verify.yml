@@ -158,3 +158,21 @@
 
           Relevant listeners:
           {{ wazuh_lb_tcp_listeners.stdout_lines | default([]) | select('search', ':(1514|1515|15140|15150|443|8443|55000|55001|9200|9201)\\b') | list | join('\n') }}
+
+    - name: Validate VIP owner has an active load balancer listener
+      ansible.builtin.assert:
+        that:
+          - wazuh_lb_service_state.stdout | default('') == 'active'
+          - >-
+            (wazuh_lb_tcp_listeners.stdout_lines | default([])
+            | select('search', ':' ~ (wazuh_lb_check_dashboard_port | string) ~ '\\b')
+            | list | length) > 0
+        fail_msg: >-
+          {{ inventory_hostname }} currently owns {{ wazuh_lb_check_host }}
+          but {{ wazuh_load_balancer_engine }} is not listening on dashboard
+          frontend port {{ wazuh_lb_check_dashboard_port }}.
+          Check systemctl status {{ wazuh_load_balancer_engine }} and
+          /etc/{{ 'haproxy/haproxy.cfg' if wazuh_load_balancer_engine == 'haproxy' else 'nginx/stream.d/wazuh.conf' }}.
+      when:
+        - wazuh_enable_keepalived | default(false) | bool
+        - wazuh_lb_check_host in (wazuh_lb_ip_addresses.stdout | default(''))

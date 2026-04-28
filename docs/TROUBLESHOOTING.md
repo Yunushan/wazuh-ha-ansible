@@ -86,6 +86,14 @@ wazuh_dashboard_port: 8443
 wazuh_lb_dashboard_frontend_port: 443
 ```
 
+If the VIP answers with `Connection refused`, find the VIP owner and confirm HAProxy or NGINX is active there:
+
+```bash
+ansible -i inventory/production.yml wazuh_loadbalancers -b -m shell -a "ip -o addr show dev ens33; systemctl is-active keepalived haproxy; ss -lntp | grep -E ':443|:8443|:15140|:15150|:55001'"
+```
+
+Keepalived should release the VIP when the local load-balancer process is down. Re-run the load-balancer playbook if `/etc/keepalived/keepalived.conf` still has a small positive `weight` in `vrrp_script chk_lb`.
+
 ## Agents cannot enroll
 
 Check that the load balancer forwards `1515/tcp` to the manager master.

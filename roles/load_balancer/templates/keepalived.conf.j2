@@ -1,7 +1,8 @@
 vrrp_script chk_lb {
     script "pidof {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
     interval 2
-    weight 2
+    fall 2
+    rise 2
 }
 
 vrrp_instance VI_WAZUH {
