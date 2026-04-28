@@ -13,7 +13,17 @@
   register: wazuh_dashboard_install
   no_log: true
 
-- name: Configure Wazuh dashboard port
+- name: Replace existing Wazuh dashboard port settings
+  ansible.builtin.replace:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: '^[#\s]*server[.]port:.*$'
+    replace: "server.port: {{ wazuh_dashboard_port | default(443) }}"
+    owner: wazuh-dashboard
+    group: wazuh-dashboard
+    mode: "0660"
+  register: wazuh_dashboard_port_replace
+
+- name: Ensure Wazuh dashboard port setting exists
   ansible.builtin.lineinfile:
     path: /etc/wazuh-dashboard/opensearch_dashboards.yml
     regexp: '^server[.]port:'
@@ -22,13 +32,13 @@
     owner: wazuh-dashboard
     group: wazuh-dashboard
     mode: "0660"
-  register: wazuh_dashboard_port_config
+  register: wazuh_dashboard_port_line
 
 - name: Restart Wazuh dashboard after port change
   ansible.builtin.service:
     name: wazuh-dashboard
     state: restarted
-  when: wazuh_dashboard_port_config.changed
+  when: wazuh_dashboard_port_replace.changed or wazuh_dashboard_port_line.changed
 
 - name: Ensure Wazuh dashboard service is enabled and started
   ansible.builtin.service:

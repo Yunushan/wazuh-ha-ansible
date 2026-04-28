@@ -5,6 +5,18 @@
       - wazuh_load_balancer_engine in ['haproxy', 'nginx', 'none']
     fail_msg: "wazuh_load_balancer_engine must be haproxy, nginx, or none."
 
+- name: Determine effective Keepalived state
+  ansible.builtin.set_fact:
+    wazuh_keepalived_effective_enabled: "{{ (wazuh_enable_keepalived | default(false) | bool) or (wazuh_lb_virtual_ip | default('') | length > 0) }}"
+
+- name: Show effective Keepalived settings
+  ansible.builtin.debug:
+    msg: >-
+      Keepalived effective_enabled={{ wazuh_keepalived_effective_enabled }},
+      requested={{ wazuh_enable_keepalived | default(false) }},
+      vip={{ wazuh_lb_virtual_ip | default('') }},
+      interface={{ wazuh_keepalived_interface | default('eth0') }}.
+
 - name: Determine effective load balancer frontend ports
   ansible.builtin.set_fact:
     wazuh_lb_effective_agent_events_frontend_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
@@ -57,10 +69,18 @@
 
 - name: Configure Keepalived VIP
   ansible.builtin.include_tasks: keepalived.yml
-  when: wazuh_enable_keepalived | default(false) | bool
+  when: wazuh_keepalived_effective_enabled | bool
 
 - name: Apply pending load balancer handlers before verification
   ansible.builtin.meta: flush_handlers
+
+- name: Verify Keepalived remains active after handler flush
+  ansible.builtin.command:
+    cmd: systemctl is-active keepalived
+  register: wazuh_keepalived_state_after_flush
+  changed_when: false
+  failed_when: wazuh_keepalived_state_after_flush.stdout | default('') != 'active'
+  when: wazuh_keepalived_effective_enabled | bool
 
 - name: Build load balancer frontend port check list
   ansible.builtin.set_fact:
@@ -116,8 +136,49 @@
     wazuh_lb_vip_check_host: "{{ wazuh_lb_virtual_ip | regex_replace('/.*$', '') }}"
   when:
     - wazuh_load_balancer_engine != 'none'
-    - wazuh_enable_keepalived | default(false) | bool
+    - wazuh_keepalived_effective_enabled | bool
     - wazuh_lb_virtual_ip | default('') | length > 0
+
+- name: Wait briefly for Keepalived VIP election
+  ansible.builtin.pause:
+    seconds: 3
+  run_once: true
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_vip_check_host is defined
+
+- name: Check load balancer interface addresses after Keepalived start
+  ansible.builtin.command:
+    cmd: "ip -o address show dev {{ wazuh_keepalived_interface | default('eth0') }}"
+  register: wazuh_lb_addresses_after_keepalived
+  changed_when: false
+  failed_when: false
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_vip_check_host is defined
+
+- name: Build VIP owner list after Keepalived start
+  ansible.builtin.set_fact:
+    wazuh_lb_vip_owner_hosts: "{{ (wazuh_lb_vip_owner_hosts | default([])) + ([item] if (wazuh_lb_vip_check_host in (hostvars[item].wazuh_lb_addresses_after_keepalived.stdout | default(''))) else []) }}"
+  loop: "{{ ansible_play_hosts }}"
+  run_once: true
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_vip_check_host is defined
+
+- name: Validate Keepalived VIP ownership
+  ansible.builtin.assert:
+    that:
+      - wazuh_lb_vip_owner_hosts | default([]) | length > 0
+    fail_msg: >-
+      No load balancer node owns {{ wazuh_lb_vip_check_host }} on
+      {{ wazuh_keepalived_interface | default('eth0') }} after Keepalived start.
+      Check systemctl status keepalived and journalctl -u keepalived.
+    success_msg: "VIP {{ wazuh_lb_vip_check_host }} is owned by {{ wazuh_lb_vip_owner_hosts | join(', ') }}."
+  run_once: true
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_vip_check_host is defined
 
 - name: Wait for load balancer dashboard frontend port on VIP
   ansible.builtin.wait_for:

@@ -55,6 +55,11 @@
       ansible.builtin.set_fact:
         wazuh_lb_check_host: "{{ (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) if (wazuh_enable_keepalived | default(false) | bool and wazuh_lb_virtual_ip | default('') | length > 0) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
 
+    - name: Determine effective Keepalived state for verification
+      ansible.builtin.set_fact:
+        wazuh_keepalived_effective_enabled: "{{ (wazuh_enable_keepalived | default(false) | bool) or (wazuh_lb_virtual_ip | default('') | length > 0) }}"
+        wazuh_lb_check_host: "{{ (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) if (((wazuh_enable_keepalived | default(false) | bool) or (wazuh_lb_virtual_ip | default('') | length > 0)) and wazuh_lb_virtual_ip | default('') | length > 0) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
+
     - name: Determine effective load balancer check ports
       ansible.builtin.set_fact:
         wazuh_lb_check_agent_events_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
@@ -126,7 +131,7 @@
         wazuh_lb_vip_owner_hosts: "{{ (wazuh_lb_vip_owner_hosts | default([])) + ([item] if (wazuh_lb_check_host in (hostvars[item].wazuh_lb_ip_addresses.stdout | default(''))) else []) }}"
       loop: "{{ ansible_play_hosts }}"
       run_once: true
-      when: wazuh_enable_keepalived | default(false) | bool
+      when: wazuh_keepalived_effective_enabled | bool
 
     - name: Validate at least one load balancer owns the VIP
       ansible.builtin.assert:
@@ -138,7 +143,7 @@
           assigned to {{ wazuh_keepalived_interface | default('eth0') }}.
         success_msg: "VIP {{ wazuh_lb_check_host }} is owned by {{ wazuh_lb_vip_owner_hosts | join(', ') }}."
       run_once: true
-      when: wazuh_enable_keepalived | default(false) | bool
+      when: wazuh_keepalived_effective_enabled | bool
 
     - name: Check load balancer TCP listeners on node
       ansible.builtin.command:
@@ -153,7 +158,7 @@
       register: wazuh_lb_keepalived_state
       changed_when: false
       failed_when: false
-      when: wazuh_enable_keepalived | default(false) | bool
+      when: wazuh_keepalived_effective_enabled | bool
 
     - name: Check load balancer service state
       ansible.builtin.command:
@@ -193,5 +198,5 @@
           Check systemctl status {{ wazuh_load_balancer_engine }} and
           /etc/{{ 'haproxy/haproxy.cfg' if wazuh_load_balancer_engine == 'haproxy' else 'nginx/stream.d/wazuh.conf' }}.
       when:
-        - wazuh_enable_keepalived | default(false) | bool
+        - wazuh_keepalived_effective_enabled | bool
         - wazuh_lb_check_host in (wazuh_lb_ip_addresses.stdout | default(''))
