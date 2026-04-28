@@ -19,10 +19,15 @@ wazuh_dashboard_port: 443
 wazuh_load_balancer_engine: "haproxy"
 wazuh_enable_keepalived: false
 wazuh_lb_virtual_ip: ""
+wazuh_lb_bind_address: "*"
 wazuh_keepalived_interface: "eth0"
 wazuh_keepalived_router_id: 51
 wazuh_keepalived_auth_pass: "CHANGE_ME"
+wazuh_lb_agent_events_frontend_port: 1514
+wazuh_lb_agent_enrollment_frontend_port: 1515
+wazuh_lb_api_frontend_port: 55000
 wazuh_lb_dashboard_frontend_port: 443
+wazuh_lb_indexer_api_frontend_port: 9200
 wazuh_lb_1514_to_workers_only: true
 wazuh_lb_expose_indexer_api: false
 

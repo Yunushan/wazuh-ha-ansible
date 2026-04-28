@@ -35,6 +35,7 @@ Edit:
 - `wazuh_lb_virtual_ip`
 - `wazuh_keepalived_interface`
 - `wazuh_keepalived_auth_pass`
+- `wazuh_lb_*_frontend_port` values if load balancers share hosts with managers or dashboards
 
 ## 4. Run preflight
 

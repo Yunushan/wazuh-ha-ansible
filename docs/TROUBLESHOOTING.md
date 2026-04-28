@@ -79,6 +79,22 @@ Validate manually:
 haproxy -c -f /etc/haproxy/haproxy.cfg
 ```
 
+If `systemctl restart haproxy` fails on nodes that also run Wazuh manager or dashboard services, check for listener conflicts:
+
+```bash
+ss -lntp | grep -E '1514|1515|443|55000|9200'
+journalctl -u haproxy -n 100 --no-pager
+```
+
+Converged nodes cannot have HAProxy and the local Wazuh services listen on the same wildcard ports at the same time. Use dedicated load-balancer hosts for standard ports, or set non-conflicting frontend ports in inventory:
+
+```yaml
+wazuh_lb_agent_events_frontend_port: 15140
+wazuh_lb_agent_enrollment_frontend_port: 15150
+wazuh_lb_api_frontend_port: 55001
+wazuh_lb_dashboard_frontend_port: 8443
+```
+
 ## NGINX stream config fails
 
 Some distributions package the NGINX stream module separately. On Debian/Ubuntu this project attempts to install `libnginx-mod-stream`.

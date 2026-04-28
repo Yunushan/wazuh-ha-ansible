@@ -1,3 +1,4 @@
+{% set lb_bind_address = wazuh_lb_bind_address | default('*', true) %}
 global
     log /dev/log local0
     log /dev/log local1 notice
@@ -19,7 +20,7 @@ defaults
     timeout server  1h
 
 frontend wazuh_agent_events_1514
-    bind *:1514
+    bind {{ lb_bind_address }}:{{ wazuh_lb_agent_events_frontend_port | default(1514) }}
     default_backend wazuh_agent_events
 
 backend wazuh_agent_events
@@ -36,7 +37,7 @@ backend wazuh_agent_events
 {% endfor %}
 
 frontend wazuh_agent_enrollment_1515
-    bind *:1515
+    bind {{ lb_bind_address }}:{{ wazuh_lb_agent_enrollment_frontend_port | default(1515) }}
     default_backend wazuh_agent_enrollment
 
 backend wazuh_agent_enrollment
@@ -48,7 +49,7 @@ backend wazuh_agent_enrollment
 {% endfor %}
 
 frontend wazuh_api_55000
-    bind *:55000
+    bind {{ lb_bind_address }}:{{ wazuh_lb_api_frontend_port | default(55000) }}
     default_backend wazuh_api
 
 backend wazuh_api
@@ -58,7 +59,7 @@ backend wazuh_api
 {% endfor %}
 
 frontend wazuh_dashboard_https
-    bind *:{{ wazuh_lb_dashboard_frontend_port | default(443) }}
+    bind {{ lb_bind_address }}:{{ wazuh_lb_dashboard_frontend_port | default(443) }}
     default_backend wazuh_dashboard_https
 
 backend wazuh_dashboard_https
@@ -69,7 +70,7 @@ backend wazuh_dashboard_https
 
 {% if wazuh_lb_expose_indexer_api | default(false) | bool %}
 frontend wazuh_indexer_api_9200
-    bind *:9200
+    bind {{ lb_bind_address }}:{{ wazuh_lb_indexer_api_frontend_port | default(9200) }}
     default_backend wazuh_indexer_api
 
 backend wazuh_indexer_api

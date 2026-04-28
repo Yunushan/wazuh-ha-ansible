@@ -1,3 +1,5 @@
+{% set lb_bind_address = wazuh_lb_bind_address | default('*', true) %}
+{% set lb_listen_prefix = '' if lb_bind_address in ['*', '0.0.0.0'] else lb_bind_address ~ ':' %}
 stream {
     upstream wazuh_agent_events {
         hash $remote_addr consistent;
@@ -21,24 +23,50 @@ stream {
 {% endfor %}
     }
 
+    upstream wazuh_api {
+{% for host in groups.get('wazuh_managers', []) %}
+        server {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:55000;
+{% endfor %}
+    }
+
     upstream wazuh_dashboard_https {
 {% for host in groups.get('wazuh_dashboards', []) %}
         server {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:{{ wazuh_dashboard_port | default(443) }};
 {% endfor %}
     }
 
+{% if wazuh_lb_expose_indexer_api | default(false) | bool %}
+    upstream wazuh_indexer_api {
+{% for host in groups.get('wazuh_indexers', []) %}
+        server {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:9200;
+{% endfor %}
+    }
+
+{% endif %}
     server {
-        listen 1514;
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_agent_events_frontend_port | default(1514) }};
         proxy_pass wazuh_agent_events;
     }
 
     server {
-        listen 1515;
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_agent_enrollment_frontend_port | default(1515) }};
         proxy_pass wazuh_agent_enrollment;
     }
 
     server {
-        listen {{ wazuh_lb_dashboard_frontend_port | default(443) }};
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_api_frontend_port | default(55000) }};
+        proxy_pass wazuh_api;
+    }
+
+    server {
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_dashboard_frontend_port | default(443) }};
         proxy_pass wazuh_dashboard_https;
     }
+
+{% if wazuh_lb_expose_indexer_api | default(false) | bool %}
+    server {
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_indexer_api_frontend_port | default(9200) }};
+        proxy_pass wazuh_indexer_api;
+    }
+{% endif %}
 }

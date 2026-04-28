@@ -15,6 +15,7 @@
     owner: root
     group: root
     mode: "0644"
+    validate: haproxy -c -f %s
   notify: Restart haproxy
 
 - name: Enable and start HAProxy

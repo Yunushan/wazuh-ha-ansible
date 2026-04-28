@@ -20,6 +20,8 @@ This is the default example. It is useful when you want a compact production bas
 - Multiple dashboards can be balanced behind HAProxy/NGINX.
 - Keepalived can move a VIP between load-balancer candidates.
 
+In this compact layout, the load balancer shares hosts with services that already listen on Wazuh's standard ports. Use dedicated load-balancer hosts when the VIP must expose `1514`, `1515`, `443`, and `55000`; otherwise set non-conflicting load-balancer frontend ports in inventory.
+
 ## 2. Separated enterprise HA
 
 Use dedicated hosts for each layer when throughput, compliance, or isolation matters.

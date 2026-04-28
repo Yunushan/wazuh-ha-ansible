@@ -122,7 +122,7 @@ Change at least:
 - `wazuh_node_ip`
 - SSH user settings
 - `wazuh_lb_virtual_ip` if using Keepalived
-- dashboard port if needed
+- dashboard and load-balancer frontend ports if components share the same hosts
 - Wazuh version selector if needed
 - node names if you want a custom naming scheme
 
@@ -197,6 +197,15 @@ This project is not hardcoded to 3 nodes. To scale up or down:
 4. Use one or more managers with `wazuh_manager_type: worker`.
 5. Keep at least 3 indexers for an HA production baseline.
 6. Add at least 2 load balancers plus a VIP if you want the load-balancer layer to be HA.
+
+When load balancers run on dedicated hosts, the frontend ports can stay on the standard Wazuh ports. In a converged inventory where the same hosts also run managers and dashboards, use non-conflicting frontend ports such as:
+
+```yaml
+wazuh_lb_agent_events_frontend_port: 15140
+wazuh_lb_agent_enrollment_frontend_port: 15150
+wazuh_lb_api_frontend_port: 55001
+wazuh_lb_dashboard_frontend_port: 8443
+```
 
 Examples:
 
