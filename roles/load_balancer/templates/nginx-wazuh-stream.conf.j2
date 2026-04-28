@@ -44,28 +44,28 @@ stream {
 
 {% endif %}
     server {
-        listen {{ lb_listen_prefix }}{{ wazuh_lb_agent_events_frontend_port | default(1514) }};
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_effective_agent_events_frontend_port | default(wazuh_lb_agent_events_frontend_port | default(1514)) }};
         proxy_pass wazuh_agent_events;
     }
 
     server {
-        listen {{ lb_listen_prefix }}{{ wazuh_lb_agent_enrollment_frontend_port | default(1515) }};
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_effective_agent_enrollment_frontend_port | default(wazuh_lb_agent_enrollment_frontend_port | default(1515)) }};
         proxy_pass wazuh_agent_enrollment;
     }
 
     server {
-        listen {{ lb_listen_prefix }}{{ wazuh_lb_api_frontend_port | default(55000) }};
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_effective_api_frontend_port | default(wazuh_lb_api_frontend_port | default(55000)) }};
         proxy_pass wazuh_api;
     }
 
     server {
-        listen {{ lb_listen_prefix }}{{ wazuh_lb_dashboard_frontend_port | default(443) }};
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_effective_dashboard_frontend_port | default(wazuh_lb_dashboard_frontend_port | default(443)) }};
         proxy_pass wazuh_dashboard_https;
     }
 
 {% if wazuh_lb_expose_indexer_api | default(false) | bool %}
     server {
-        listen {{ lb_listen_prefix }}{{ wazuh_lb_indexer_api_frontend_port | default(9200) }};
+        listen {{ lb_listen_prefix }}{{ wazuh_lb_effective_indexer_api_frontend_port | default(wazuh_lb_indexer_api_frontend_port | default(9200)) }};
         proxy_pass wazuh_indexer_api;
     }
 {% endif %}

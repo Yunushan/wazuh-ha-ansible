@@ -5,23 +5,41 @@
       - wazuh_load_balancer_engine in ['haproxy', 'nginx', 'none']
     fail_msg: "wazuh_load_balancer_engine must be haproxy, nginx, or none."
 
+- name: Determine effective load balancer frontend ports
+  ansible.builtin.set_fact:
+    wazuh_lb_effective_agent_events_frontend_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
+    wazuh_lb_effective_agent_enrollment_frontend_port: "{{ 15150 if ('wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
+    wazuh_lb_effective_api_frontend_port: "{{ 55001 if ('wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
+    wazuh_lb_effective_dashboard_frontend_port: "{{ 8443 if ('wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
+    wazuh_lb_effective_indexer_api_frontend_port: "{{ 9201 if (wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
+
+- name: Show effective load balancer frontend ports
+  ansible.builtin.debug:
+    msg: >-
+      Load balancer frontend ports on {{ inventory_hostname }}:
+      events={{ wazuh_lb_effective_agent_events_frontend_port }},
+      enrollment={{ wazuh_lb_effective_agent_enrollment_frontend_port }},
+      api={{ wazuh_lb_effective_api_frontend_port }},
+      dashboard={{ wazuh_lb_effective_dashboard_frontend_port }},
+      indexer_api={{ wazuh_lb_effective_indexer_api_frontend_port }}.
+
 - name: Prevent load balancer frontend port conflicts on converged hosts
   ansible.builtin.assert:
     that:
       - >-
         'wazuh_managers' not in group_names
         or (
-          (wazuh_lb_agent_events_frontend_port | default(1514) | int) != 1514
-          and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) != 1515
-          and (wazuh_lb_api_frontend_port | default(55000) | int) != 55000
+          (wazuh_lb_effective_agent_events_frontend_port | int) != 1514
+          and (wazuh_lb_effective_agent_enrollment_frontend_port | int) != 1515
+          and (wazuh_lb_effective_api_frontend_port | int) != 55000
         )
       - >-
         'wazuh_dashboards' not in group_names
-        or (wazuh_lb_dashboard_frontend_port | default(443) | int) != (wazuh_dashboard_port | default(443) | int)
+        or (wazuh_lb_effective_dashboard_frontend_port | int) != (wazuh_dashboard_port | default(443) | int)
       - >-
         not (wazuh_lb_expose_indexer_api | default(false) | bool)
         or 'wazuh_indexers' not in group_names
-        or (wazuh_lb_indexer_api_frontend_port | default(9200) | int) != 9200
+        or (wazuh_lb_effective_indexer_api_frontend_port | int) != 9200
     fail_msg: >-
       This host also runs Wazuh components, so the load balancer cannot use
       the same frontend ports as the local manager, dashboard, or indexer services.
