@@ -79,6 +79,13 @@ wazuh_lb_agent_enrollment_frontend_port: 15150
 wazuh_lb_api_frontend_port: 55001
 ```
 
+In the converged inventory, the dashboard load-balancer frontend also moves away from the local dashboard service port by default. Use `https://<vip>:8443` unless you intentionally move the local dashboard service to a different backend port and keep the load balancer on `443`:
+
+```yaml
+wazuh_dashboard_port: 8443
+wazuh_lb_dashboard_frontend_port: 443
+```
+
 ## Agents cannot enroll
 
 Check that the load balancer forwards `1515/tcp` to the manager master.

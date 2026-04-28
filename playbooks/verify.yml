@@ -55,10 +55,61 @@
       ansible.builtin.set_fact:
         wazuh_lb_check_host: "{{ (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) if (wazuh_enable_keepalived | default(false) | bool and wazuh_lb_virtual_ip | default('') | length > 0) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
 
+    - name: Determine effective load balancer check ports
+      ansible.builtin.set_fact:
+        wazuh_lb_check_agent_events_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
+        wazuh_lb_check_agent_enrollment_port: "{{ 15150 if ('wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
+        wazuh_lb_check_api_port: "{{ 55001 if ('wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
+        wazuh_lb_check_dashboard_port: "{{ 8443 if ('wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
+        wazuh_lb_check_indexer_api_port: "{{ 9201 if (wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
+
+    - name: Show load balancer verification endpoints
+      ansible.builtin.debug:
+        msg: >-
+          Checking load balancer {{ wazuh_lb_check_host }} ports:
+          events={{ wazuh_lb_check_agent_events_port }},
+          enrollment={{ wazuh_lb_check_agent_enrollment_port }},
+          api={{ wazuh_lb_check_api_port }},
+          dashboard_https={{ wazuh_lb_check_dashboard_port }},
+          indexer_api={{ wazuh_lb_check_indexer_api_port }}.
+
     - name: Wait for load-balanced agent event port
       ansible.builtin.wait_for:
         host: "{{ wazuh_lb_check_host }}"
-        port: 1514
+        port: "{{ wazuh_lb_check_agent_events_port }}"
         timeout: 20
       delegate_to: localhost
       become: false
+
+    - name: Wait for load-balanced agent enrollment port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_lb_check_host }}"
+        port: "{{ wazuh_lb_check_agent_enrollment_port }}"
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+    - name: Wait for load-balanced Wazuh API port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_lb_check_host }}"
+        port: "{{ wazuh_lb_check_api_port }}"
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+    - name: Wait for load-balanced dashboard HTTPS port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_lb_check_host }}"
+        port: "{{ wazuh_lb_check_dashboard_port }}"
+        timeout: 20
+      delegate_to: localhost
+      become: false
+
+    - name: Wait for load-balanced indexer API port
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_lb_check_host }}"
+        port: "{{ wazuh_lb_check_indexer_api_port }}"
+        timeout: 20
+      delegate_to: localhost
+      become: false
+      when: wazuh_lb_expose_indexer_api | default(false) | bool
