@@ -13,11 +13,92 @@
   register: wazuh_manager_install
   no_log: true
 
+- name: Create Wazuh manager systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/wazuh-manager.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Wazuh manager start timeout
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/wazuh-manager.service.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      TimeoutStartSec={{ wazuh_manager_start_timeout_sec | default(300) }}
+  register: wazuh_manager_systemd_override
+
+- name: Reload systemd after Wazuh manager override changes
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: wazuh_manager_systemd_override.changed
+
 - name: Ensure Wazuh manager service is enabled and started
-  ansible.builtin.service:
-    name: wazuh-manager
-    enabled: true
-    state: started
+  block:
+    - name: Start Wazuh manager service
+      ansible.builtin.service:
+        name: wazuh-manager
+        enabled: true
+        state: started
+  rescue:
+    - name: Collect Wazuh manager systemd status
+      ansible.builtin.command:
+        cmd: systemctl status wazuh-manager --no-pager -l
+      register: wazuh_manager_systemd_status
+      changed_when: false
+      failed_when: false
+
+    - name: Collect recent Wazuh manager journal
+      ansible.builtin.command:
+        cmd: journalctl -u wazuh-manager -n 100 --no-pager
+      register: wazuh_manager_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Collect Wazuh manager log tail
+      ansible.builtin.command:
+        cmd: tail -n 120 /var/ossec/logs/ossec.log
+      register: wazuh_manager_log_tail
+      changed_when: false
+      failed_when: false
+
+    - name: Collect Wazuh manager component status
+      ansible.builtin.command:
+        cmd: /var/ossec/bin/wazuh-control status
+      register: wazuh_manager_component_status
+      changed_when: false
+      failed_when: false
+
+    - name: Check Wazuh manager directories
+      ansible.builtin.command:
+        cmd: ls -ld /var/ossec /var/ossec/etc /var/ossec/logs
+      register: wazuh_manager_directory_status
+      changed_when: false
+      failed_when: false
+
+    - name: Report Wazuh manager startup diagnostics
+      ansible.builtin.fail:
+        msg: |
+          Wazuh manager service failed to start on {{ inventory_hostname }}.
+
+          systemctl status wazuh-manager:
+          {{ wazuh_manager_systemd_status.stdout | default(wazuh_manager_systemd_status.stderr | default('unavailable')) }}
+
+          journalctl -u wazuh-manager -n 100:
+          {{ wazuh_manager_journal.stdout | default(wazuh_manager_journal.stderr | default('unavailable')) }}
+
+          /var/ossec/logs/ossec.log tail:
+          {{ wazuh_manager_log_tail.stdout | default(wazuh_manager_log_tail.stderr | default('unavailable')) }}
+
+          /var/ossec/bin/wazuh-control status:
+          {{ wazuh_manager_component_status.stdout | default(wazuh_manager_component_status.stderr | default('unavailable')) }}
+
+          Wazuh manager directories:
+          {{ wazuh_manager_directory_status.stdout | default(wazuh_manager_directory_status.stderr | default('unavailable')) }}
 
 - name: Ensure Filebeat service is enabled and started
   ansible.builtin.service:

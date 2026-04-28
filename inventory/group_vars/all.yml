@@ -14,6 +14,7 @@ wazuh_disable_repo_after_install: true
 wazuh_indexer_serial: 1
 wazuh_manager_serial: 1
 wazuh_dashboard_serial: 1
+wazuh_manager_start_timeout_sec: 300
 
 wazuh_dashboard_port: 443
 wazuh_load_balancer_engine: "haproxy"

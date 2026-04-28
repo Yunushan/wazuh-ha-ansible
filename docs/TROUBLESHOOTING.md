@@ -54,6 +54,14 @@ On the manager:
 ```bash
 /var/ossec/bin/cluster_control -l
 journalctl -u wazuh-manager -n 100 --no-pager
+tail -n 120 /var/ossec/logs/ossec.log
+/var/ossec/bin/wazuh-control status
+```
+
+If `wazuh-manager` times out during first startup, increase the service startup window in inventory:
+
+```yaml
+wazuh_manager_start_timeout_sec: 300
 ```
 
 ## Agents cannot enroll
