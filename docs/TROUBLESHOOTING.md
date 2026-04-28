@@ -23,11 +23,18 @@ Check:
 sysctl vm.max_map_count
 systemctl status wazuh-indexer
 journalctl -u wazuh-indexer -n 100 --no-pager
-tail -n 100 /var/log/wazuh-indexer/wazuh-cluster.log
+tail -n 100 /var/log/wazuh-indexer/wazuh-indexer-cluster.log
 ls -l /etc/wazuh-indexer/certs
 ```
 
 Expected `vm.max_map_count` is at least `262144`.
+
+If Java reports that it cannot open `/var/log/wazuh-indexer/gc.log`, recreate the log directory:
+
+```bash
+install -d -o wazuh-indexer -g wazuh-indexer -m 0750 /var/log/wazuh-indexer
+systemctl start wazuh-indexer
+```
 
 If the install task reports `changed=0` and the service start fails, the node likely has a partial or failed previous indexer installation. Inspect `/var/log/wazuh-install.log` and the Wazuh indexer journal on that node before removing or reinstalling anything.
 

@@ -7,6 +7,14 @@
   register: wazuh_indexer_install
   no_log: true
 
+- name: Ensure Wazuh indexer log directory exists
+  ansible.builtin.file:
+    path: /var/log/wazuh-indexer
+    state: directory
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: "0750"
+
 - name: Ensure Wazuh indexer service is enabled and started
   block:
     - name: Start Wazuh indexer service
@@ -31,7 +39,7 @@
 
     - name: Collect Wazuh indexer log tail
       ansible.builtin.command:
-        cmd: tail -n 80 /var/log/wazuh-indexer/wazuh-cluster.log
+        cmd: tail -n 80 /var/log/wazuh-indexer/wazuh-indexer-cluster.log
       register: wazuh_indexer_log_tail
       changed_when: false
       failed_when: false
@@ -61,7 +69,7 @@
           journalctl -u wazuh-indexer -n 80:
           {{ wazuh_indexer_journal.stdout | default(wazuh_indexer_journal.stderr | default('unavailable')) }}
 
-          /var/log/wazuh-indexer/wazuh-cluster.log tail:
+          /var/log/wazuh-indexer/wazuh-indexer-cluster.log tail:
           {{ wazuh_indexer_log_tail.stdout | default(wazuh_indexer_log_tail.stderr | default('unavailable')) }}
 
           /etc/wazuh-indexer/certs:
