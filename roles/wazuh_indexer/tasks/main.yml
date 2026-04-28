@@ -8,7 +8,64 @@
   no_log: true
 
 - name: Ensure Wazuh indexer service is enabled and started
-  ansible.builtin.service:
-    name: wazuh-indexer
-    enabled: true
-    state: started
+  block:
+    - name: Start Wazuh indexer service
+      ansible.builtin.service:
+        name: wazuh-indexer
+        enabled: true
+        state: started
+  rescue:
+    - name: Collect Wazuh indexer systemd status
+      ansible.builtin.command:
+        cmd: systemctl status wazuh-indexer --no-pager -l
+      register: wazuh_indexer_systemd_status
+      changed_when: false
+      failed_when: false
+
+    - name: Collect recent Wazuh indexer journal
+      ansible.builtin.command:
+        cmd: journalctl -u wazuh-indexer -n 80 --no-pager
+      register: wazuh_indexer_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Collect Wazuh indexer log tail
+      ansible.builtin.command:
+        cmd: tail -n 80 /var/log/wazuh-indexer/wazuh-cluster.log
+      register: wazuh_indexer_log_tail
+      changed_when: false
+      failed_when: false
+
+    - name: Check Wazuh indexer certificate directory
+      ansible.builtin.command:
+        cmd: ls -l /etc/wazuh-indexer/certs
+      register: wazuh_indexer_cert_listing
+      changed_when: false
+      failed_when: false
+
+    - name: Check Wazuh indexer vm.max_map_count
+      ansible.builtin.command:
+        cmd: sysctl vm.max_map_count
+      register: wazuh_indexer_max_map_count
+      changed_when: false
+      failed_when: false
+
+    - name: Report Wazuh indexer startup diagnostics
+      ansible.builtin.fail:
+        msg: |
+          Wazuh indexer service failed to start on {{ inventory_hostname }}.
+
+          systemctl status wazuh-indexer:
+          {{ wazuh_indexer_systemd_status.stdout | default(wazuh_indexer_systemd_status.stderr | default('unavailable')) }}
+
+          journalctl -u wazuh-indexer -n 80:
+          {{ wazuh_indexer_journal.stdout | default(wazuh_indexer_journal.stderr | default('unavailable')) }}
+
+          /var/log/wazuh-indexer/wazuh-cluster.log tail:
+          {{ wazuh_indexer_log_tail.stdout | default(wazuh_indexer_log_tail.stderr | default('unavailable')) }}
+
+          /etc/wazuh-indexer/certs:
+          {{ wazuh_indexer_cert_listing.stdout | default(wazuh_indexer_cert_listing.stderr | default('unavailable')) }}
+
+          vm.max_map_count:
+          {{ wazuh_indexer_max_map_count.stdout | default(wazuh_indexer_max_map_count.stderr | default('unavailable')) }}
