@@ -21,10 +21,45 @@
     owner: root
     group: root
     mode: "0600"
+    validate: keepalived -t -f %s
   notify: Restart keepalived
 
 - name: Enable and start Keepalived
-  ansible.builtin.service:
-    name: keepalived
-    enabled: true
-    state: started
+  block:
+    - name: Start Keepalived service
+      ansible.builtin.service:
+        name: keepalived
+        enabled: true
+        state: started
+  rescue:
+    - name: Collect Keepalived systemd status
+      ansible.builtin.command:
+        cmd: systemctl status keepalived --no-pager -l
+      register: wazuh_keepalived_systemd_status
+      changed_when: false
+      failed_when: false
+
+    - name: Collect recent Keepalived journal
+      ansible.builtin.command:
+        cmd: journalctl -u keepalived -n 120 --no-pager
+      register: wazuh_keepalived_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Report Keepalived startup diagnostics
+      ansible.builtin.fail:
+        msg: |
+          Keepalived failed to start on {{ inventory_hostname }}.
+
+          systemctl status keepalived:
+          {{ wazuh_keepalived_systemd_status.stdout | default(wazuh_keepalived_systemd_status.stderr | default('unavailable')) }}
+
+          journalctl -u keepalived -n 120:
+          {{ wazuh_keepalived_journal.stdout | default(wazuh_keepalived_journal.stderr | default('unavailable')) }}
+
+- name: Verify Keepalived is active
+  ansible.builtin.command:
+    cmd: systemctl is-active keepalived
+  register: wazuh_keepalived_active_state
+  changed_when: false
+  failed_when: wazuh_keepalived_active_state.stdout | default('') != 'active'

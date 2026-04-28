@@ -92,6 +92,12 @@ If the VIP answers with `Connection refused`, find the VIP owner and confirm HAP
 ansible -i inventory/production.yml wazuh_loadbalancers -b -m shell -a "ip -o addr show dev ens33; systemctl is-active keepalived haproxy; ss -lntp | grep -E ':443|:8443|:15140|:15150|:55001'"
 ```
 
+If `keepalived` is `inactive` on every node, the VIP is not owned by the Wazuh HA cluster. Check the service logs:
+
+```bash
+ansible -i inventory/production.yml wazuh_loadbalancers -b -m shell -a "systemctl status keepalived --no-pager -l; journalctl -u keepalived -n 120 --no-pager"
+```
+
 Keepalived should release the VIP when the local load-balancer process is down. Re-run the load-balancer playbook if `/etc/keepalived/keepalived.conf` still has a small positive `weight` in `vrrp_script chk_lb`.
 
 ## Agents cannot enroll

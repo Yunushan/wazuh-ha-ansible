@@ -121,6 +121,25 @@
       changed_when: false
       failed_when: false
 
+    - name: Build load balancer VIP owner list
+      ansible.builtin.set_fact:
+        wazuh_lb_vip_owner_hosts: "{{ (wazuh_lb_vip_owner_hosts | default([])) + ([item] if (wazuh_lb_check_host in (hostvars[item].wazuh_lb_ip_addresses.stdout | default(''))) else []) }}"
+      loop: "{{ ansible_play_hosts }}"
+      run_once: true
+      when: wazuh_enable_keepalived | default(false) | bool
+
+    - name: Validate at least one load balancer owns the VIP
+      ansible.builtin.assert:
+        that:
+          - wazuh_lb_vip_owner_hosts | default([]) | length > 0
+        fail_msg: >-
+          No load balancer node currently owns {{ wazuh_lb_check_host }}.
+          Keepalived must be active on at least one node and the VIP must be
+          assigned to {{ wazuh_keepalived_interface | default('eth0') }}.
+        success_msg: "VIP {{ wazuh_lb_check_host }} is owned by {{ wazuh_lb_vip_owner_hosts | join(', ') }}."
+      run_once: true
+      when: wazuh_enable_keepalived | default(false) | bool
+
     - name: Check load balancer TCP listeners on node
       ansible.builtin.command:
         cmd: ss -H -lntp
