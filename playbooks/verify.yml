@@ -48,7 +48,7 @@
 
 - name: Verify load balancer VIP or node ports
   hosts: wazuh_loadbalancers
-  become: false
+  become: true
   gather_facts: false
   tasks:
     - name: Select load balancer check host
@@ -113,3 +113,48 @@
       delegate_to: localhost
       become: false
       when: wazuh_lb_expose_indexer_api | default(false) | bool
+
+    - name: Check VIP address assignment on load balancer node
+      ansible.builtin.command:
+        cmd: "ip -o address show dev {{ wazuh_keepalived_interface | default('eth0') }}"
+      register: wazuh_lb_ip_addresses
+      changed_when: false
+      failed_when: false
+
+    - name: Check load balancer TCP listeners on node
+      ansible.builtin.command:
+        cmd: ss -H -lntp
+      register: wazuh_lb_tcp_listeners
+      changed_when: false
+      failed_when: false
+
+    - name: Check Keepalived service state
+      ansible.builtin.command:
+        cmd: systemctl is-active keepalived
+      register: wazuh_lb_keepalived_state
+      changed_when: false
+      failed_when: false
+      when: wazuh_enable_keepalived | default(false) | bool
+
+    - name: Check load balancer service state
+      ansible.builtin.command:
+        cmd: "systemctl is-active {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
+      register: wazuh_lb_service_state
+      changed_when: false
+      failed_when: false
+      when: wazuh_load_balancer_engine in ['haproxy', 'nginx']
+
+    - name: Report load balancer node state
+      ansible.builtin.debug:
+        msg: |
+          {{ inventory_hostname }} load balancer state:
+          interface={{ wazuh_keepalived_interface | default('eth0') }}
+          vip={{ wazuh_lb_virtual_ip | default('') }}
+          keepalived={{ wazuh_lb_keepalived_state.stdout | default('not checked') }}
+          {{ wazuh_load_balancer_engine }}={{ wazuh_lb_service_state.stdout | default('not checked') }}
+
+          Addresses:
+          {{ wazuh_lb_ip_addresses.stdout | default('unavailable') }}
+
+          Relevant listeners:
+          {{ wazuh_lb_tcp_listeners.stdout_lines | default([]) | select('search', ':(1514|1515|15140|15150|443|8443|55000|55001|9200|9201)\\b') | list | join('\n') }}
