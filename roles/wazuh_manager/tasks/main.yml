@@ -13,6 +13,31 @@
   register: wazuh_manager_install
   no_log: true
 
+- name: Check active TCP listeners before Wazuh manager start
+  ansible.builtin.command:
+    cmd: ss -H -lntp
+  register: wazuh_manager_tcp_listeners_before_start
+  changed_when: false
+  failed_when: false
+
+- name: Stop HAProxy if it is blocking local Wazuh manager ports
+  ansible.builtin.service:
+    name: haproxy
+    enabled: false
+    state: stopped
+  when:
+    - "'wazuh_loadbalancers' in group_names"
+    - (wazuh_manager_tcp_listeners_before_start.stdout_lines | default([]) | select('search', ':(1514|1515|55000)\\b') | select('search', 'haproxy') | list | length) > 0
+
+- name: Stop NGINX if it is blocking local Wazuh manager ports
+  ansible.builtin.service:
+    name: nginx
+    enabled: false
+    state: stopped
+  when:
+    - "'wazuh_loadbalancers' in group_names"
+    - (wazuh_manager_tcp_listeners_before_start.stdout_lines | default([]) | select('search', ':(1514|1515|55000)\\b') | select('search', 'nginx') | list | length) > 0
+
 - name: Create Wazuh manager systemd override directory
   ansible.builtin.file:
     path: /etc/systemd/system/wazuh-manager.service.d
@@ -80,6 +105,13 @@
       changed_when: false
       failed_when: false
 
+    - name: Collect active TCP listeners after Wazuh manager failure
+      ansible.builtin.command:
+        cmd: ss -H -lntp
+      register: wazuh_manager_tcp_listeners_after_failure
+      changed_when: false
+      failed_when: false
+
     - name: Report Wazuh manager startup diagnostics
       ansible.builtin.fail:
         msg: |
@@ -99,6 +131,9 @@
 
           Wazuh manager directories:
           {{ wazuh_manager_directory_status.stdout | default(wazuh_manager_directory_status.stderr | default('unavailable')) }}
+
+          Active TCP listeners:
+          {{ wazuh_manager_tcp_listeners_after_failure.stdout | default(wazuh_manager_tcp_listeners_after_failure.stderr | default('unavailable')) }}
 
 - name: Ensure Filebeat service is enabled and started
   ansible.builtin.service:

@@ -5,6 +5,30 @@
       - wazuh_load_balancer_engine in ['haproxy', 'nginx', 'none']
     fail_msg: "wazuh_load_balancer_engine must be haproxy, nginx, or none."
 
+- name: Prevent load balancer frontend port conflicts on converged hosts
+  ansible.builtin.assert:
+    that:
+      - >-
+        'wazuh_managers' not in group_names
+        or (
+          (wazuh_lb_agent_events_frontend_port | default(1514) | int) != 1514
+          and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) != 1515
+          and (wazuh_lb_api_frontend_port | default(55000) | int) != 55000
+        )
+      - >-
+        'wazuh_dashboards' not in group_names
+        or (wazuh_lb_dashboard_frontend_port | default(443) | int) != (wazuh_dashboard_port | default(443) | int)
+      - >-
+        not (wazuh_lb_expose_indexer_api | default(false) | bool)
+        or 'wazuh_indexers' not in group_names
+        or (wazuh_lb_indexer_api_frontend_port | default(9200) | int) != 9200
+    fail_msg: >-
+      This host also runs Wazuh components, so the load balancer cannot use
+      the same frontend ports as the local manager, dashboard, or indexer services.
+      Use dedicated load balancer hosts, or set non-conflicting
+      wazuh_lb_*_frontend_port values in inventory.
+  when: wazuh_load_balancer_engine != 'none'
+
 - name: Configure HAProxy load balancer
   ansible.builtin.include_tasks: haproxy.yml
   when: wazuh_load_balancer_engine == 'haproxy'

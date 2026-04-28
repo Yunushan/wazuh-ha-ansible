@@ -64,6 +64,21 @@ If `wazuh-manager` times out during first startup, increase the service startup 
 wazuh_manager_start_timeout_sec: 300
 ```
 
+If `wazuh-authd` reports that it cannot bind port `1515`, check for an existing load balancer listener on converged hosts:
+
+```bash
+ss -lntp | grep -E '1514|1515|55000'
+systemctl stop haproxy nginx
+```
+
+Then set non-conflicting frontend ports in inventory before rerunning the load-balancer playbook:
+
+```yaml
+wazuh_lb_agent_events_frontend_port: 15140
+wazuh_lb_agent_enrollment_frontend_port: 15150
+wazuh_lb_api_frontend_port: 55001
+```
+
 ## Agents cannot enroll
 
 Check that the load balancer forwards `1515/tcp` to the manager master.
