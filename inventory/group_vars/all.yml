@@ -30,7 +30,27 @@ wazuh_lb_api_frontend_port: 55000
 wazuh_lb_dashboard_frontend_port: 443
 wazuh_lb_indexer_api_frontend_port: 9200
 wazuh_lb_1514_to_workers_only: true
+wazuh_lb_1514_master_backup: true
 wazuh_lb_expose_indexer_api: false
+
+# Aggressive HA defaults for short lab/production failover windows.
+# Raise these values if your network is noisy and Keepalived flaps.
+wazuh_haproxy_timeout_connect: "2s"
+wazuh_haproxy_timeout_check: "1s"
+wazuh_haproxy_check_inter: "1s"
+wazuh_haproxy_check_fastinter: "500ms"
+wazuh_haproxy_check_fall: 2
+wazuh_haproxy_check_rise: 2
+wazuh_keepalived_check_interval: 1
+wazuh_keepalived_check_fall: 1
+wazuh_keepalived_check_rise: 1
+wazuh_keepalived_advert_int: 1
+wazuh_keepalived_down_timer_adverts: 1
+wazuh_keepalived_garp_master_delay: 0
+wazuh_keepalived_garp_master_repeat: 5
+wazuh_keepalived_garp_master_refresh: 10
+wazuh_keepalived_garp_master_refresh_repeat: 2
+wazuh_keepalived_unicast_enabled: false
 
 # Official central-component OS list reflected from current Wazuh docs.
 wazuh_official_central_os:

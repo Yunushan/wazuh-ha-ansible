@@ -15,9 +15,11 @@ defaults
     mode tcp
     option tcplog
     option dontlognull
-    timeout connect 10s
+    timeout connect {{ wazuh_haproxy_timeout_connect | default('2s') }}
+    timeout check {{ wazuh_haproxy_timeout_check | default('1s') }}
     timeout client  1h
     timeout server  1h
+    default-server inter {{ wazuh_haproxy_check_inter | default('1s') }} fastinter {{ wazuh_haproxy_check_fastinter | default('500ms') }} fall {{ wazuh_haproxy_check_fall | default(2) }} rise {{ wazuh_haproxy_check_rise | default(2) }}
 
 frontend wazuh_agent_events_1514
     bind {{ lb_bind_address }}:{{ wazuh_lb_effective_agent_events_frontend_port | default(wazuh_lb_agent_events_frontend_port | default(1514)) }}
@@ -31,9 +33,12 @@ backend wazuh_agent_events
 {% set _ = worker_hosts.append(host) %}
 {% endif %}
 {% endfor %}
-{% set event_hosts = worker_hosts if (wazuh_lb_1514_to_workers_only | default(true) | bool and worker_hosts | length > 0) else groups.get('wazuh_managers', []) %}
-{% for host in event_hosts %}
-    server {{ hostvars[host].wazuh_manager_name | default(host) }} {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1514 check
+{% set prefer_workers = wazuh_lb_1514_to_workers_only | default(true) | bool and worker_hosts | length > 0 %}
+{% for host in groups.get('wazuh_managers', []) %}
+{% set is_worker = hostvars[host].wazuh_manager_type | default('worker') == 'worker' %}
+{% if (not prefer_workers) or is_worker or (wazuh_lb_1514_master_backup | default(true) | bool) %}
+    server {{ hostvars[host].wazuh_manager_name | default(host) }} {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1514 check{% if prefer_workers and not is_worker %} backup{% endif %}
+{% endif %}
 {% endfor %}
 
 frontend wazuh_agent_enrollment_1515

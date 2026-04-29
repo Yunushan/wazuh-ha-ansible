@@ -5,9 +5,9 @@ global_defs {
 
 vrrp_script chk_lb {
     script "/usr/bin/pgrep -x {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
-    interval 2
-    fall 2
-    rise 2
+    interval {{ wazuh_keepalived_check_interval | default(1) }}
+    fall {{ wazuh_keepalived_check_fall | default(1) }}
+    rise {{ wazuh_keepalived_check_rise | default(1) }}
 }
 
 vrrp_instance VI_WAZUH {
@@ -15,7 +15,22 @@ vrrp_instance VI_WAZUH {
     interface {{ wazuh_keepalived_interface }}
     virtual_router_id {{ wazuh_keepalived_router_id }}
     priority {{ keepalived_priority | default(100) }}
-    advert_int 1
+    advert_int {{ wazuh_keepalived_advert_int | default(1) }}
+    down_timer_adverts {{ wazuh_keepalived_down_timer_adverts | default(1) }}
+    garp_master_delay {{ wazuh_keepalived_garp_master_delay | default(0) }}
+    garp_master_repeat {{ wazuh_keepalived_garp_master_repeat | default(5) }}
+    garp_master_refresh {{ wazuh_keepalived_garp_master_refresh | default(10) }}
+    garp_master_refresh_repeat {{ wazuh_keepalived_garp_master_refresh_repeat | default(2) }}
+{% if wazuh_keepalived_unicast_enabled | default(false) | bool %}
+    unicast_src_ip {{ wazuh_keepalived_unicast_src_ip | default(wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}
+    unicast_peer {
+{% for host in groups.get('wazuh_loadbalancers', []) %}
+{% if host != inventory_hostname %}
+        {{ hostvars[host].wazuh_keepalived_unicast_src_ip | default(hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host))) }}
+{% endif %}
+{% endfor %}
+    }
+{% endif %}
     authentication {
         auth_type PASS
         auth_pass {{ wazuh_keepalived_auth_pass }}
