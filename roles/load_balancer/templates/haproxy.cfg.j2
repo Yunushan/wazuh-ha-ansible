@@ -1,4 +1,4 @@
-{% set lb_bind_address = wazuh_lb_bind_address | default('*', true) %}
+{% set lb_bind_address = wazuh_lb_effective_bind_address | default(wazuh_lb_bind_address | default('*', true)) %}
 global
     log /dev/log local0
     log /dev/log local1 notice

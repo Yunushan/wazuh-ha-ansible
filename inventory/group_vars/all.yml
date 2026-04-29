@@ -21,6 +21,7 @@ wazuh_load_balancer_engine: "haproxy"
 wazuh_enable_keepalived: false
 wazuh_lb_virtual_ip: ""
 wazuh_lb_bind_address: "*"
+wazuh_lb_bind_to_vip: false
 wazuh_keepalived_interface: "eth0"
 wazuh_keepalived_router_id: 51
 wazuh_keepalived_auth_pass: "CHANGE_ME"

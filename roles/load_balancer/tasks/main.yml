@@ -17,6 +17,44 @@
       vip={{ wazuh_lb_virtual_ip | default('') }},
       interface={{ wazuh_keepalived_interface | default('eth0') }}.
 
+- name: Require VIP when binding load balancer listeners only to the VIP
+  ansible.builtin.assert:
+    that:
+      - wazuh_keepalived_effective_enabled | bool
+      - wazuh_lb_virtual_ip | default('') | length > 0
+    fail_msg: >-
+      Set wazuh_lb_virtual_ip and enable Keepalived before using
+      wazuh_lb_bind_to_vip=true.
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_bind_to_vip | default(false) | bool
+
+- name: Determine effective load balancer bind address
+  ansible.builtin.set_fact:
+    wazuh_lb_effective_bind_address: >-
+      {{
+        (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', ''))
+        if (wazuh_lb_bind_to_vip | default(false) | bool)
+        else (wazuh_lb_bind_address | default('*', true))
+      }}
+  when: wazuh_load_balancer_engine != 'none'
+
+- name: Enable non-local binds for VIP-only load balancer listeners
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    state: present
+    sysctl_set: true
+    reload: true
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_bind_to_vip | default(false) | bool
+
+- name: Show effective load balancer bind address
+  ansible.builtin.debug:
+    msg: "Load balancer bind address on {{ inventory_hostname }}: {{ wazuh_lb_effective_bind_address }}"
+  when: wazuh_load_balancer_engine != 'none'
+
 - name: Determine effective load balancer frontend ports
   ansible.builtin.set_fact:
     wazuh_lb_effective_agent_events_frontend_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
@@ -136,7 +174,9 @@
   loop: "{{ wazuh_lb_frontend_ports_to_check | default([]) }}"
   delegate_to: localhost
   become: false
-  when: wazuh_load_balancer_engine != 'none'
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - not (wazuh_lb_bind_to_vip | default(false) | bool)
 
 - name: Select load balancer VIP check host
   ansible.builtin.set_fact:
