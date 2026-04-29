@@ -1,0 +1,15 @@
+[Unit]
+Description=Wazuh dashboard backend firewall
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStartPre=-/usr/sbin/nft delete table inet wazuh_dashboard_backend
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/wazuh-dashboard-backend.nft
+ExecReload=/bin/sh -c '/usr/sbin/nft delete table inet wazuh_dashboard_backend 2>/dev/null || true; /usr/sbin/nft -f /etc/nftables.d/wazuh-dashboard-backend.nft'
+ExecStop=-/usr/sbin/nft delete table inet wazuh_dashboard_backend
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

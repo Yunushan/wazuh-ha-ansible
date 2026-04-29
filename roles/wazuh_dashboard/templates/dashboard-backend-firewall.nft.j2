@@ -1,0 +1,21 @@
+{% set allowed_sources = [] %}
+{% for source in wazuh_dashboard_backend_firewall_allowed_sources | default([]) %}
+{% set _ = allowed_sources.append(source | string) %}
+{% endfor %}
+{% if allowed_sources | length == 0 %}
+{% for host in groups.get('wazuh_loadbalancers', []) %}
+{% set _ = allowed_sources.append(hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) | string) %}
+{% endfor %}
+{% if wazuh_lb_virtual_ip | default('') | length > 0 %}
+{% set _ = allowed_sources.append(wazuh_lb_virtual_ip | regex_replace('/.*$', '') | string) %}
+{% endif %}
+{% endif %}
+table inet wazuh_dashboard_backend {
+    chain input {
+        type filter hook input priority -100; policy accept;
+
+        ip saddr { 127.0.0.1{% for source in allowed_sources | unique %}, {{ source }}{% endfor %} } tcp dport {{ wazuh_dashboard_port | default(443) | int }} accept
+        ip6 saddr ::1 tcp dport {{ wazuh_dashboard_port | default(443) | int }} accept
+        tcp dport {{ wazuh_dashboard_port | default(443) | int }} reject with tcp reset
+    }
+}

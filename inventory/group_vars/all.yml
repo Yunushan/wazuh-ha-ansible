@@ -17,6 +17,8 @@ wazuh_dashboard_serial: 1
 wazuh_manager_start_timeout_sec: 300
 
 wazuh_dashboard_port: 443
+wazuh_dashboard_backend_firewall_enabled: false
+wazuh_dashboard_backend_firewall_allowed_sources: []
 wazuh_load_balancer_engine: "haproxy"
 wazuh_enable_keepalived: false
 wazuh_lb_virtual_ip: ""

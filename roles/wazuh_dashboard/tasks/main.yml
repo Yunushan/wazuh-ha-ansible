@@ -45,3 +45,72 @@
     name: wazuh-dashboard
     enabled: true
     state: started
+
+- name: Configure Wazuh dashboard backend firewall
+  when: wazuh_dashboard_backend_firewall_enabled | default(false) | bool
+  block:
+    - name: Install nftables for dashboard backend firewall
+      ansible.builtin.package:
+        name: nftables
+        state: present
+
+    - name: Ensure nftables include directory exists
+      ansible.builtin.file:
+        path: /etc/nftables.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render dashboard backend nftables rules
+      ansible.builtin.template:
+        src: dashboard-backend-firewall.nft.j2
+        dest: /etc/nftables.d/wazuh-dashboard-backend.nft
+        owner: root
+        group: root
+        mode: "0644"
+      register: wazuh_dashboard_backend_firewall_rules
+
+    - name: Validate dashboard backend nftables rules
+      ansible.builtin.command:
+        cmd: nft -c -f /etc/nftables.d/wazuh-dashboard-backend.nft
+      changed_when: false
+
+    - name: Install dashboard backend firewall systemd unit
+      ansible.builtin.template:
+        src: wazuh-dashboard-backend-firewall.service.j2
+        dest: /etc/systemd/system/wazuh-dashboard-backend-firewall.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: wazuh_dashboard_backend_firewall_unit
+
+    - name: Enable dashboard backend firewall
+      ansible.builtin.systemd:
+        name: wazuh-dashboard-backend-firewall
+        enabled: true
+        state: "{{ 'restarted' if (wazuh_dashboard_backend_firewall_rules.changed or wazuh_dashboard_backend_firewall_unit.changed) else 'started' }}"
+        daemon_reload: true
+
+- name: Remove Wazuh dashboard backend firewall
+  when: not (wazuh_dashboard_backend_firewall_enabled | default(false) | bool)
+  block:
+    - name: Disable dashboard backend firewall unit
+      ansible.builtin.systemd:
+        name: wazuh-dashboard-backend-firewall
+        enabled: false
+        state: stopped
+        daemon_reload: true
+      failed_when: false
+
+    - name: Remove dashboard backend firewall files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nftables.d/wazuh-dashboard-backend.nft
+        - /etc/systemd/system/wazuh-dashboard-backend-firewall.service
+
+    - name: Reload systemd after dashboard backend firewall removal
+      ansible.builtin.systemd:
+        daemon_reload: true
