@@ -39,6 +39,15 @@
       }}
   when: wazuh_load_balancer_engine != 'none'
 
+- name: Determine whether load balancer frontend ports should answer on node addresses
+  ansible.builtin.set_fact:
+    wazuh_lb_check_node_address_frontends: >-
+      {{
+        (wazuh_lb_effective_bind_address | default('*')) in
+        ['*', '0.0.0.0', '::', wazuh_node_ip | default(ansible_host | default(inventory_hostname))]
+      }}
+  when: wazuh_load_balancer_engine != 'none'
+
 - name: Enable non-local binds for VIP-only load balancer listeners
   ansible.posix.sysctl:
     name: net.ipv4.ip_nonlocal_bind
@@ -176,7 +185,7 @@
   become: false
   when:
     - wazuh_load_balancer_engine != 'none'
-    - not (wazuh_lb_bind_to_vip | default(false) | bool)
+    - wazuh_lb_check_node_address_frontends | default(true) | bool
 
 - name: Select load balancer VIP check host
   ansible.builtin.set_fact:
