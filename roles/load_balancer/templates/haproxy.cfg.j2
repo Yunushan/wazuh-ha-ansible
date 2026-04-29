@@ -36,8 +36,10 @@ backend wazuh_agent_events
 {% set prefer_workers = wazuh_lb_1514_to_workers_only | default(true) | bool and worker_hosts | length > 0 %}
 {% for host in groups.get('wazuh_managers', []) %}
 {% set is_worker = hostvars[host].wazuh_manager_type | default('worker') == 'worker' %}
-{% if (not prefer_workers) or is_worker or (wazuh_lb_1514_master_backup | default(true) | bool) %}
-    server {{ hostvars[host].wazuh_manager_name | default(host) }} {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1514 check{% if prefer_workers and not is_worker %} backup{% endif %}
+{% if (not prefer_workers) or is_worker %}
+    server {{ hostvars[host].wazuh_manager_name | default(host) }} {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1514 check
+{% elif wazuh_lb_1514_master_backup | default(true) | bool %}
+    server {{ hostvars[host].wazuh_manager_name | default(host) }} {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1514 check backup
 {% endif %}
 {% endfor %}
 
