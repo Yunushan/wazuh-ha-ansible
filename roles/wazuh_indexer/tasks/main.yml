@@ -77,3 +77,16 @@
 
           vm.max_map_count:
           {{ wazuh_indexer_max_map_count.stdout | default(wazuh_indexer_max_map_count.stderr | default('unavailable')) }}
+
+- name: Configure Wazuh indexer allocation awareness attribute
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: "^node\\.attr\\.{{ wazuh_indexer_awareness_attribute }}:"
+    line: "node.attr.{{ wazuh_indexer_awareness_attribute }}: {{ wazuh_indexer_awareness_value }}"
+    owner: root
+    group: wazuh-indexer
+    mode: "0660"
+  notify: Restart wazuh-indexer
+  when:
+    - wazuh_indexer_awareness_attribute | default('') | length > 0
+    - wazuh_indexer_awareness_value | default('') | length > 0

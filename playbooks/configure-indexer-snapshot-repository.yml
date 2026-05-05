@@ -1,0 +1,15 @@
+---
+- name: Configure Wazuh indexer snapshot repository path
+  hosts: wazuh_indexers
+  become: true
+  gather_facts: false
+  serial: "{{ wazuh_indexer_serial | default(1) }}"
+  roles:
+    - role: wazuh_indexer_snapshot_repository
+
+- name: Register Wazuh indexer snapshot repository
+  hosts: "{{ groups['wazuh_indexers'][0] }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: wazuh_indexer_snapshot_repository_register

@@ -4,7 +4,7 @@ global_defs {
 }
 
 vrrp_script chk_lb {
-    script "/usr/bin/pgrep -x {{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
+    script "/usr/local/sbin/wazuh-keepalived-check-lb"
     interval {{ wazuh_keepalived_check_interval | default(1) }}
     fall {{ wazuh_keepalived_check_fall | default(1) }}
     rise {{ wazuh_keepalived_check_rise | default(1) }}
@@ -17,6 +17,11 @@ vrrp_instance VI_WAZUH {
     priority {{ keepalived_priority | default(100) }}
     advert_int {{ wazuh_keepalived_advert_int | default(1) }}
     down_timer_adverts {{ wazuh_keepalived_down_timer_adverts | default(1) }}
+{% if wazuh_keepalived_nopreempt | default(true) | bool %}
+    nopreempt
+{% elif (wazuh_keepalived_preempt_delay | default(0) | int) > 0 %}
+    preempt_delay {{ wazuh_keepalived_preempt_delay | int }}
+{% endif %}
     garp_master_delay {{ wazuh_keepalived_garp_master_delay | default(0) }}
     garp_master_repeat {{ wazuh_keepalived_garp_master_repeat | default(5) }}
     garp_master_refresh {{ wazuh_keepalived_garp_master_refresh | default(10) }}

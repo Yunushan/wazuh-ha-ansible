@@ -1,0 +1,26 @@
+---
+- name: Require agent load balancer address
+  ansible.builtin.assert:
+    that:
+      - wazuh_agent_load_balancer_address | default('') | length > 0
+    fail_msg: >-
+      Set wazuh_agent_load_balancer_address or wazuh_lb_virtual_ip before
+      generating the Wazuh agent profile.
+
+- name: Ensure controller artifact directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_controller_artifacts_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Render Wazuh agent client configuration snippet
+  ansible.builtin.template:
+    src: agent-client-ossec.conf.j2
+    dest: "{{ wazuh_controller_artifacts_dir }}/agent-client-ossec.conf"
+    mode: "0600"
+
+- name: Render Wazuh agent deployment environment
+  ansible.builtin.template:
+    src: agent-deployment.env.j2
+    dest: "{{ wazuh_controller_artifacts_dir }}/agent-deployment.env"
+    mode: "0600"

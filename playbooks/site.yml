@@ -7,4 +7,6 @@
 - import_playbook: install-dashboards.yml
 - import_playbook: disable-repos.yml
 - import_playbook: install-loadbalancers.yml
+- import_playbook: install-backend-firewall.yml
+- import_playbook: configure-monitoring.yml
 - import_playbook: verify.yml

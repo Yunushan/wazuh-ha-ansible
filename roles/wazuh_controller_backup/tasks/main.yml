@@ -1,0 +1,44 @@
+---
+- name: Determine controller backup run ID
+  ansible.builtin.set_fact:
+    wazuh_backup_run_id_effective: "{{ wazuh_backup_run_id | default(lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ')) }}"
+
+- name: Build controller backup path list
+  ansible.builtin.set_fact:
+    wazuh_controller_backup_paths_effective: >-
+      {{
+        (wazuh_backup_controller_paths | default([]))
+        + (ansible_inventory_sources | default([]))
+        + (wazuh_backup_controller_extra_paths | default([]))
+      }}
+
+- name: Check controller backup paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ wazuh_controller_backup_paths_effective | unique }}"
+  register: wazuh_controller_backup_path_stats
+  no_log: true
+
+- name: Build existing controller backup path list
+  ansible.builtin.set_fact:
+    wazuh_controller_backup_existing_paths: "{{ wazuh_controller_backup_path_stats.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+
+- name: Ensure controller backup directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_backup_controller_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Create controller backup archive
+  community.general.archive:
+    path: "{{ wazuh_controller_backup_existing_paths }}"
+    dest: "{{ wazuh_backup_controller_dir }}/controller-{{ wazuh_backup_run_id_effective }}.tar.gz"
+    format: gz
+    mode: "0600"
+  when: wazuh_controller_backup_existing_paths | length > 0
+  no_log: true
+
+- name: Report controller backup archive
+  ansible.builtin.debug:
+    msg: "Controller backup: {{ wazuh_backup_controller_dir }}/controller-{{ wazuh_backup_run_id_effective }}.tar.gz"
+  when: wazuh_controller_backup_existing_paths | length > 0

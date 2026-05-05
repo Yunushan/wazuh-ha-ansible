@@ -1,0 +1,7 @@
+---
+- name: Restore Wazuh indexer snapshot safely
+  hosts: "{{ groups['wazuh_indexers'][0] }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: wazuh_indexer_snapshot_restore

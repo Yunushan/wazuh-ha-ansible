@@ -1,0 +1,9 @@
+---
+- import_playbook: verify.yml
+
+- name: Run Wazuh HA validation runbook
+  hosts: localhost
+  become: false
+  gather_facts: false
+  roles:
+    - role: wazuh_ha_validation

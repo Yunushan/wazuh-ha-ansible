@@ -16,3 +16,10 @@
   gather_facts: false
   roles:
     - role: wazuh_indexer_init
+
+- name: Configure Wazuh indexer data resilience
+  hosts: "{{ groups['wazuh_indexers'][0] }}"
+  become: true
+  gather_facts: false
+  roles:
+    - role: wazuh_indexer_resilience

@@ -1,0 +1,7 @@
+---
+- name: Generate Wazuh agent VIP profile
+  hosts: localhost
+  become: false
+  gather_facts: false
+  roles:
+    - role: wazuh_agent_profile

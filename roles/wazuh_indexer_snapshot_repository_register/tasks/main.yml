@@ -1,0 +1,44 @@
+---
+- name: Require Wazuh indexer snapshot repository registration
+  ansible.builtin.assert:
+    that:
+      - wazuh_indexer_snapshot_repository_enabled | default(false) | bool
+      - wazuh_indexer_snapshot_repository_type | default('fs') == 'fs'
+    fail_msg: "Enable wazuh_indexer_snapshot_repository_enabled before registering the repository."
+
+- name: Register Wazuh indexer filesystem snapshot repository
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_snapshot/{{ wazuh_indexer_snapshot_repository_name }}"
+    method: PUT
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    body_format: json
+    body:
+      type: fs
+      settings:
+        location: "{{ wazuh_indexer_snapshot_path }}"
+        compress: "{{ wazuh_indexer_snapshot_compress | default(true) | bool }}"
+        readonly: "{{ wazuh_indexer_snapshot_readonly | default(false) | bool }}"
+    return_content: true
+    status_code:
+      - 200
+      - 201
+  register: wazuh_indexer_snapshot_repository_result
+  changed_when: true
+
+- name: Verify Wazuh indexer snapshot repository
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_snapshot/{{ wazuh_indexer_snapshot_repository_name }}/_verify"
+    method: POST
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: wazuh_indexer_snapshot_repository_verify
+  changed_when: false
+
+- name: Report Wazuh indexer snapshot repository
+  ansible.builtin.debug:
+    msg: "Snapshot repository {{ wazuh_indexer_snapshot_repository_name }} verified at {{ wazuh_indexer_snapshot_path }}."

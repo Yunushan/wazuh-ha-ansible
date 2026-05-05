@@ -26,7 +26,7 @@ frontend wazuh_agent_events_1514
     default_backend wazuh_agent_events
 
 backend wazuh_agent_events
-    balance source
+    balance {{ wazuh_lb_agent_events_balance | default('source') }}
 {% set worker_hosts = [] %}
 {% for host in groups.get('wazuh_managers', []) %}
 {% if hostvars[host].wazuh_manager_type | default('worker') == 'worker' %}
@@ -48,9 +48,9 @@ frontend wazuh_agent_enrollment_1515
     default_backend wazuh_agent_enrollment
 
 backend wazuh_agent_enrollment
-    balance first
+    balance {{ wazuh_lb_agent_enrollment_balance | default('leastconn') }}
 {% for host in groups.get('wazuh_managers', []) %}
-{% if hostvars[host].wazuh_manager_type | default('worker') == 'master' %}
+{% if (wazuh_lb_agent_enrollment_include_workers | default(false) | bool) or hostvars[host].wazuh_manager_type | default('worker') == 'master' %}
     server {{ hostvars[host].wazuh_manager_name | default(host) }} {{ hostvars[host].wazuh_node_ip | default(hostvars[host].ansible_host | default(host)) }}:1515 check
 {% endif %}
 {% endfor %}

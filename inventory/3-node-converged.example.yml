@@ -27,7 +27,7 @@ all:
     wazuh_lb_virtual_ip: "10.10.10.50/24"
     wazuh_keepalived_interface: "eth0"
     wazuh_keepalived_router_id: 51
-    wazuh_keepalived_auth_pass: "CHANGE_ME_42"
+    wazuh_keepalived_auth_pass: "CHANG42"
 
     # Converged nodes already run Wazuh services on the standard ports.
     # Keep dedicated load balancers on 1514/1515/55000/443, but use
@@ -43,6 +43,10 @@ all:
 
     # Manager traffic policy.
     wazuh_lb_1514_to_workers_only: true
+
+    # With three total nodes, one replica is the practical availability target:
+    # the indexer cluster can stay green after one node loss, but not after two.
+    wazuh_indexer_replica_count: 1
 
   children:
     wazuh_generator:

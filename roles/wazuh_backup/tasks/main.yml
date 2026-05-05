@@ -1,0 +1,90 @@
+---
+- name: Determine node backup run ID
+  ansible.builtin.set_fact:
+    wazuh_backup_run_id_effective: "{{ wazuh_backup_run_id | default(lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ')) }}"
+
+- name: Build Wazuh node backup path candidates
+  ansible.builtin.set_fact:
+    wazuh_backup_path_candidates: >-
+      {{
+        [
+          '/etc/wazuh-indexer',
+          '/etc/wazuh-dashboard',
+          '/etc/filebeat',
+          '/etc/haproxy',
+          '/etc/keepalived',
+          '/etc/nginx',
+          '/etc/nftables.d',
+          '/etc/systemd/system/wazuh-manager.service.d',
+          '/etc/systemd/system/wazuh-backend-firewall.service',
+          '/etc/systemd/system/wazuh-dashboard-backend-firewall.service',
+          '/etc/systemd/system/wazuh-ha-monitor.service',
+          '/etc/systemd/system/wazuh-ha-monitor.timer',
+          '/usr/local/sbin/wazuh-keepalived-check-lb',
+          '/usr/local/sbin/wazuh-ha-monitor',
+          '/var/ossec/etc',
+          '/var/ossec/api/configuration',
+          wazuh_install_workdir
+        ]
+        + (wazuh_backup_remote_log_paths if (wazuh_backup_include_logs | default(false) | bool) else [])
+        + (wazuh_backup_remote_extra_paths | default([]))
+      }}
+
+- name: Check Wazuh node backup paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ wazuh_backup_path_candidates | unique }}"
+  register: wazuh_backup_path_stats
+  no_log: true
+
+- name: Build existing Wazuh node backup path list
+  ansible.builtin.set_fact:
+    wazuh_backup_existing_paths: "{{ wazuh_backup_path_stats.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+
+- name: Ensure remote Wazuh backup directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_backup_remote_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create remote Wazuh node backup archive
+  community.general.archive:
+    path: "{{ wazuh_backup_existing_paths }}"
+    dest: "{{ wazuh_backup_remote_dir }}/{{ inventory_hostname }}-{{ wazuh_backup_run_id_effective }}.tar.gz"
+    format: gz
+    owner: root
+    group: root
+    mode: "0600"
+  when: wazuh_backup_existing_paths | length > 0
+  no_log: true
+
+- name: Ensure controller node-backup directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_backup_controller_dir }}/nodes/{{ wazuh_backup_run_id_effective }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when:
+    - wazuh_backup_fetch_to_controller | default(true) | bool
+    - wazuh_backup_existing_paths | length > 0
+
+- name: Fetch Wazuh node backup archive to controller
+  ansible.builtin.fetch:
+    src: "{{ wazuh_backup_remote_dir }}/{{ inventory_hostname }}-{{ wazuh_backup_run_id_effective }}.tar.gz"
+    dest: "{{ wazuh_backup_controller_dir }}/nodes/{{ wazuh_backup_run_id_effective }}/{{ inventory_hostname }}.tar.gz"
+    flat: true
+  when:
+    - wazuh_backup_fetch_to_controller | default(true) | bool
+    - wazuh_backup_existing_paths | length > 0
+  no_log: true
+
+- name: Report Wazuh node backup archive
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} backup:
+      remote={{ wazuh_backup_remote_dir }}/{{ inventory_hostname }}-{{ wazuh_backup_run_id_effective }}.tar.gz
+      controller={{ wazuh_backup_controller_dir }}/nodes/{{ wazuh_backup_run_id_effective }}/{{ inventory_hostname }}.tar.gz
+  when: wazuh_backup_existing_paths | length > 0

@@ -9,3 +9,4 @@
     - role: common
     - role: wazuh_distribute
     - role: wazuh_dashboard
+    - role: wazuh_dashboard_tls

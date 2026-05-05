@@ -5,6 +5,16 @@
       - wazuh_load_balancer_engine in ['haproxy', 'nginx', 'none']
     fail_msg: "wazuh_load_balancer_engine must be haproxy, nginx, or none."
 
+- name: Validate agent load-balancing policy
+  ansible.builtin.assert:
+    that:
+      - wazuh_lb_agent_events_balance | default('source') in ['source', 'leastconn', 'roundrobin']
+      - wazuh_lb_agent_enrollment_balance | default('leastconn') in ['source', 'leastconn', 'roundrobin']
+    fail_msg: >-
+      Agent load-balancing algorithms must be one of source, leastconn,
+      or roundrobin.
+  when: wazuh_load_balancer_engine != 'none'
+
 - name: Determine effective Keepalived state
   ansible.builtin.set_fact:
     wazuh_keepalived_effective_enabled: "{{ (wazuh_enable_keepalived | default(false) | bool) or (wazuh_lb_virtual_ip | default('') | length > 0) }}"
@@ -48,6 +58,11 @@
       }}
   when: wazuh_load_balancer_engine != 'none'
 
+- name: Determine whether converged frontend ports need conflict avoidance
+  ansible.builtin.set_fact:
+    wazuh_lb_avoid_converged_port_conflicts: "{{ wazuh_lb_check_node_address_frontends | default(true) | bool }}"
+  when: wazuh_load_balancer_engine != 'none'
+
 - name: Enable non-local binds for VIP-only load balancer listeners
   ansible.posix.sysctl:
     name: net.ipv4.ip_nonlocal_bind
@@ -66,11 +81,11 @@
 
 - name: Determine effective load balancer frontend ports
   ansible.builtin.set_fact:
-    wazuh_lb_effective_agent_events_frontend_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
-    wazuh_lb_effective_agent_enrollment_frontend_port: "{{ 15150 if ('wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
-    wazuh_lb_effective_api_frontend_port: "{{ 55001 if ('wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
-    wazuh_lb_effective_dashboard_frontend_port: "{{ 8443 if ('wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
-    wazuh_lb_effective_indexer_api_frontend_port: "{{ 9201 if (wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
+    wazuh_lb_effective_agent_events_frontend_port: "{{ 15140 if (wazuh_lb_avoid_converged_port_conflicts | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
+    wazuh_lb_effective_agent_enrollment_frontend_port: "{{ 15150 if (wazuh_lb_avoid_converged_port_conflicts | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
+    wazuh_lb_effective_api_frontend_port: "{{ 55001 if (wazuh_lb_avoid_converged_port_conflicts | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
+    wazuh_lb_effective_dashboard_frontend_port: "{{ 8443 if (wazuh_lb_avoid_converged_port_conflicts | default(true) | bool and 'wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
+    wazuh_lb_effective_indexer_api_frontend_port: "{{ 9201 if (wazuh_lb_avoid_converged_port_conflicts | default(true) | bool and wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
 
 - name: Show effective load balancer frontend ports
   ansible.builtin.debug:
@@ -104,7 +119,48 @@
       the same frontend ports as the local manager, dashboard, or indexer services.
       Use dedicated load balancer hosts, or set non-conflicting
       wazuh_lb_*_frontend_port values in inventory.
-  when: wazuh_load_balancer_engine != 'none'
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - wazuh_lb_avoid_converged_port_conflicts | default(true) | bool
+
+- name: Check existing TCP listeners before VIP-only frontend restart
+  ansible.builtin.command:
+    cmd: ss -H -lntp
+  register: wazuh_lb_tcp_listeners_before_vip_bind
+  changed_when: false
+  failed_when: false
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - not (wazuh_lb_check_node_address_frontends | default(true) | bool)
+
+- name: Prevent VIP-only frontend ports from conflicting with wildcard local listeners
+  ansible.builtin.assert:
+    that:
+      - >-
+        wazuh_lb_tcp_listeners_before_vip_bind.stdout_lines | default([])
+        | reject('search', 'haproxy|nginx')
+        | select('search', '(^|[^0-9])0[.]0[.]0[.]0:' ~ (item | string) ~ '\\b|\\[::\\]:' ~ (item | string) ~ '\\b|\\*:' ~ (item | string) ~ '\\b')
+        | list
+        | length == 0
+    fail_msg: >-
+      Cannot bind the load balancer VIP {{ wazuh_lb_effective_bind_address }}:{{ item }}
+      because another local service is already listening on wildcard port {{ item }}.
+      Bind the local Wazuh service to {{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }},
+      move that backend service to another local port, or keep using the non-conflicting
+      wazuh_lb_*_frontend_port values.
+  loop: >-
+    {{
+      [
+        wazuh_lb_effective_agent_events_frontend_port | int,
+        wazuh_lb_effective_agent_enrollment_frontend_port | int,
+        wazuh_lb_effective_api_frontend_port | int,
+        wazuh_lb_effective_dashboard_frontend_port | int
+      ]
+      + ([wazuh_lb_effective_indexer_api_frontend_port | int] if (wazuh_lb_expose_indexer_api | default(false) | bool) else [])
+    }}
+  when:
+    - wazuh_load_balancer_engine != 'none'
+    - not (wazuh_lb_check_node_address_frontends | default(true) | bool)
 
 - name: Configure HAProxy load balancer
   ansible.builtin.include_tasks: haproxy.yml
@@ -135,6 +191,15 @@
   changed_when: false
   failed_when: wazuh_keepalived_state_after_flush.stdout | default('') != 'active'
   when: wazuh_keepalived_effective_enabled | bool
+
+- name: Verify Keepalived load balancer health check after restart
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/wazuh-keepalived-check-lb
+  register: wazuh_keepalived_lb_health_check
+  changed_when: false
+  when:
+    - wazuh_keepalived_effective_enabled | bool
+    - wazuh_load_balancer_engine != 'none'
 
 - name: Build load balancer frontend port check list
   ansible.builtin.set_fact:

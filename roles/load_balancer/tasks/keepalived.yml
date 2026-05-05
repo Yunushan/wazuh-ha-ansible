@@ -5,6 +5,14 @@
       - wazuh_lb_virtual_ip | default('') | length > 0
     fail_msg: "Set wazuh_lb_virtual_ip when wazuh_enable_keepalived=true."
 
+- name: Require a load balancer service when Keepalived is enabled
+  ansible.builtin.assert:
+    that:
+      - wazuh_load_balancer_engine | default('none') in ['haproxy', 'nginx']
+    fail_msg: >-
+      Keepalived VIP failover requires a local load balancer service. Set
+      wazuh_load_balancer_engine to haproxy or nginx.
+
 - name: Require Keepalived auth password
   ansible.builtin.assert:
     that:
@@ -15,6 +23,27 @@
       Set wazuh_keepalived_auth_pass to a shared VRRP password, or define
       vault_wazuh_keepalived_auth_pass if your inventory references it.
 
+- name: Validate Keepalived VRRP settings
+  ansible.builtin.assert:
+    that:
+      - wazuh_keepalived_router_id | int >= 1
+      - wazuh_keepalived_router_id | int <= 255
+      - wazuh_keepalived_auth_pass | string | length <= 8
+      - wazuh_keepalived_advert_int | default(1) | int >= 1
+      - wazuh_keepalived_down_timer_adverts | default(1) | int >= 1
+    fail_msg: >-
+      Keepalived requires virtual_router_id between 1 and 255, PASS auth
+      passwords of 8 characters or fewer, and positive advert/down-timer values.
+
+- name: Validate Keepalived unicast peers
+  ansible.builtin.assert:
+    that:
+      - groups.get('wazuh_loadbalancers', []) | length > 1
+    fail_msg: >-
+      Keepalived unicast mode needs at least two hosts in the
+      wazuh_loadbalancers group so peers can be rendered.
+  when: wazuh_keepalived_unicast_enabled | default(false) | bool
+
 - name: Determine Keepalived package family key
   ansible.builtin.set_fact:
     wazuh_keepalived_package_family_key: "{{ ansible_os_family if ansible_os_family in wazuh_keepalived_packages_by_family else (ansible_distribution if ansible_distribution in wazuh_keepalived_packages_by_family else ansible_os_family) }}"
@@ -23,6 +52,15 @@
   ansible.builtin.package:
     name: "{{ wazuh_keepalived_packages_by_family.get(wazuh_keepalived_package_family_key, ['keepalived']) }}"
     state: present
+
+- name: Install Keepalived load balancer health check
+  ansible.builtin.template:
+    src: keepalived-check-lb.sh.j2
+    dest: /usr/local/sbin/wazuh-keepalived-check-lb
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart keepalived
 
 - name: Configure Keepalived
   ansible.builtin.template:

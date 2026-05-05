@@ -1,0 +1,7 @@
+[Unit]
+Description=Wazuh HA health monitor
+Documentation=file:{{ wazuh_install_workdir | default('/opt/wazuh-ha-install') }}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wazuh-ha-monitor

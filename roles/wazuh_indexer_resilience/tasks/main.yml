@@ -1,0 +1,173 @@
+---
+- name: Skip Wazuh indexer resilience when disabled
+  ansible.builtin.meta: end_host
+  when: not (wazuh_indexer_resilience_enabled | default(true) | bool)
+
+- name: Determine Wazuh indexer resilience facts
+  ansible.builtin.set_fact:
+    wazuh_indexer_api_host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+    wazuh_indexer_expected_nodes: "{{ groups.get('wazuh_indexers', []) | length }}"
+    wazuh_indexer_replica_count_effective: "{{ wazuh_indexer_replica_count | int }}"
+    wazuh_indexer_health_wait_seconds: "{{ wazuh_indexer_health_wait_timeout | default(180) | int }}"
+
+- name: Validate Wazuh indexer replica policy
+  ansible.builtin.assert:
+    that:
+      - wazuh_indexer_expected_nodes | int > 0
+      - wazuh_indexer_replica_count_effective | int >= 0
+      - wazuh_indexer_replica_count_effective | int <= (((wazuh_indexer_expected_nodes | int) - 1) if (wazuh_indexer_expected_nodes | int) > 0 else 0)
+      - (wazuh_indexer_expected_nodes | int == 1 and wazuh_indexer_replica_count_effective | int == 0) or (wazuh_indexer_expected_nodes | int > 1 and wazuh_indexer_replica_count_effective | int >= 1)
+      - wazuh_indexer_resilient_index_patterns | default([]) | length > 0
+    fail_msg: >-
+      Invalid Wazuh indexer replica policy. For an HA indexer cluster,
+      replicas must be at least 1 and no higher than node_count-1. For a
+      single-node indexer, replicas must be 0.
+
+- name: Validate Wazuh indexer allocation awareness values
+  ansible.builtin.assert:
+    that:
+      - hostvars[item].wazuh_indexer_awareness_value | default('') | length > 0
+    fail_msg: >-
+      wazuh_indexer_awareness_attribute is set, so every wazuh_indexers host
+      must define wazuh_indexer_awareness_value.
+  loop: "{{ groups.get('wazuh_indexers', []) }}"
+  when: wazuh_indexer_awareness_attribute | default('') | length > 0
+
+- name: Wait for Wazuh indexer cluster API
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_indexer_api_host }}:9200/_cluster/health?wait_for_status=yellow{% if wazuh_indexer_wait_for_expected_nodes | default(true) | bool %}&wait_for_nodes=%3E%3D{{ wazuh_indexer_expected_nodes }}{% endif %}&timeout={{ wazuh_indexer_health_wait_seconds }}s"
+    method: GET
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: wazuh_indexer_health_before_resilience
+  changed_when: false
+
+- name: Build Wazuh indexer persistent cluster settings
+  ansible.builtin.set_fact:
+    wazuh_indexer_cluster_persistent_settings_effective: >-
+      {{
+        {
+          'action.destructive_requires_name': (wazuh_indexer_destructive_requires_name | default(true) | bool)
+        }
+        | combine(
+          {'cluster.routing.allocation.awareness.attributes': wazuh_indexer_awareness_attribute}
+          if (wazuh_indexer_awareness_attribute | default('') | length > 0)
+          else {}
+        )
+        | combine(wazuh_indexer_cluster_persistent_settings | default({}))
+      }}
+
+- name: Apply Wazuh indexer persistent cluster settings
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_indexer_api_host }}:9200/_cluster/settings"
+    method: PUT
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    body_format: json
+    body:
+      persistent: "{{ wazuh_indexer_cluster_persistent_settings_effective }}"
+    return_content: true
+    status_code: 200
+  register: wazuh_indexer_cluster_settings_result
+  changed_when: true
+
+- name: Install Wazuh composable replica index template
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_indexer_api_host }}:9200/_index_template/{{ wazuh_indexer_replica_template_name | default('wazuh-ha-replicas') }}"
+    method: PUT
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    body_format: json
+    body:
+      index_patterns: "{{ wazuh_indexer_resilient_index_patterns }}"
+      priority: "{{ wazuh_indexer_replica_template_priority | default(1000) | int }}"
+      template:
+        settings:
+          index:
+            number_of_replicas: "{{ wazuh_indexer_replica_count_effective | int }}"
+    return_content: true
+    status_code:
+      - 200
+      - 201
+  register: wazuh_indexer_composable_template_result
+  changed_when: true
+  failed_when: false
+
+- name: Install Wazuh legacy replica index template fallback
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_indexer_api_host }}:9200/_template/{{ wazuh_indexer_replica_template_name | default('wazuh-ha-replicas') }}"
+    method: PUT
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    body_format: json
+    body:
+      index_patterns: "{{ wazuh_indexer_resilient_index_patterns }}"
+      order: "{{ wazuh_indexer_replica_template_priority | default(1000) | int }}"
+      settings:
+        index:
+          number_of_replicas: "{{ wazuh_indexer_replica_count_effective | int }}"
+    return_content: true
+    status_code:
+      - 200
+      - 201
+  register: wazuh_indexer_legacy_template_result
+  changed_when: true
+  failed_when: false
+  when: wazuh_indexer_composable_template_result.status | default(0) | int not in [200, 201]
+
+- name: Validate Wazuh replica index template installation
+  ansible.builtin.assert:
+    that:
+      - >-
+        wazuh_indexer_composable_template_result.status | default(0) | int in [200, 201]
+        or wazuh_indexer_legacy_template_result.status | default(0) | int in [200, 201]
+    fail_msg: >-
+      Could not install Wazuh replica index template. Composable template
+      status={{ wazuh_indexer_composable_template_result.status | default('n/a') }},
+      legacy template status={{ wazuh_indexer_legacy_template_result.status | default('n/a') }}.
+
+- name: Apply Wazuh replica setting to existing indices
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_indexer_api_host }}:9200/{{ item }}/_settings?expand_wildcards=open,hidden&allow_no_indices=true&ignore_unavailable=true"
+    method: PUT
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    body_format: json
+    body:
+      index:
+        number_of_replicas: "{{ wazuh_indexer_replica_count_effective | int }}"
+    return_content: true
+    status_code: 200
+  loop: "{{ wazuh_indexer_resilient_index_patterns }}"
+  register: wazuh_indexer_existing_replica_results
+  changed_when: true
+  when: wazuh_indexer_apply_replicas_to_existing_indices | default(true) | bool
+
+- name: Wait for Wazuh indexer cluster resilience health
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_indexer_api_host }}:9200/_cluster/health?wait_for_status={{ 'green' if (wazuh_indexer_require_green | default(true) | bool) else 'yellow' }}{% if wazuh_indexer_wait_for_expected_nodes | default(true) | bool %}&wait_for_nodes=%3E%3D{{ wazuh_indexer_expected_nodes }}{% endif %}&timeout={{ wazuh_indexer_health_wait_seconds }}s"
+    method: GET
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: wazuh_indexer_health_after_resilience
+  changed_when: false
+
+- name: Report Wazuh indexer resilience state
+  ansible.builtin.debug:
+    msg: >-
+      Wazuh indexer resilience configured:
+      nodes={{ (wazuh_indexer_health_after_resilience.json | default({})).get('number_of_nodes', 'unknown') }},
+      status={{ (wazuh_indexer_health_after_resilience.json | default({})).get('status', 'unknown') }},
+      replicas={{ wazuh_indexer_replica_count_effective }},
+      template={{ wazuh_indexer_replica_template_name | default('wazuh-ha-replicas') }},
+      patterns={{ wazuh_indexer_resilient_index_patterns | join(',') }}.

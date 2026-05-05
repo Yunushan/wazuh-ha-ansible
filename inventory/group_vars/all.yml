@@ -15,10 +15,92 @@ wazuh_indexer_serial: 1
 wazuh_manager_serial: 1
 wazuh_dashboard_serial: 1
 wazuh_manager_start_timeout_sec: 300
+wazuh_indexer_resilience_enabled: true
+wazuh_indexer_replica_count: "{{ 1 if (groups.get('wazuh_indexers', []) | length | int) > 1 else 0 }}"
+wazuh_indexer_resilient_index_patterns:
+  - "wazuh-alerts-*"
+  - "wazuh-archives-*"
+  - "wazuh-monitoring-*"
+  - "wazuh-statistics-*"
+wazuh_indexer_replica_template_name: "wazuh-ha-replicas"
+wazuh_indexer_replica_template_priority: 1000
+wazuh_indexer_apply_replicas_to_existing_indices: true
+wazuh_indexer_wait_for_expected_nodes: true
+wazuh_indexer_require_green: true
+wazuh_indexer_health_wait_timeout: 180
+wazuh_indexer_destructive_requires_name: true
+wazuh_indexer_cluster_persistent_settings: {}
+wazuh_indexer_awareness_attribute: ""
+wazuh_indexer_awareness_value: ""
+wazuh_backup_controller_dir: "{{ playbook_dir }}/../.backups/wazuh"
+wazuh_backup_remote_dir: "/var/backups/wazuh-ha"
+wazuh_backup_fetch_to_controller: true
+wazuh_backup_include_logs: false
+wazuh_backup_controller_paths:
+  - "{{ wazuh_controller_artifacts_dir }}"
+wazuh_backup_controller_extra_paths: []
+wazuh_backup_remote_extra_paths: []
+wazuh_backup_remote_log_paths:
+  - /var/ossec/logs
+  - /var/log/wazuh-indexer
+  - /var/log/wazuh-dashboard
+  - /var/log/filebeat
+wazuh_restore_confirm: ""
+wazuh_restore_required_confirm: "RESTORE_WAZUH_CONFIGS"
+wazuh_restore_archive_src: ""
+wazuh_restore_archive_src_map: {}
+wazuh_restore_stop_services: true
+wazuh_restore_restart_services: true
+wazuh_indexer_snapshot_repository_enabled: false
+wazuh_indexer_snapshot_repository_name: "wazuh-backups"
+wazuh_indexer_snapshot_repository_type: "fs"
+wazuh_indexer_snapshot_path: "/mnt/wazuh-indexer-snapshots"
+wazuh_indexer_snapshot_compress: true
+wazuh_indexer_snapshot_readonly: false
+wazuh_indexer_snapshot_name: "wazuh-snapshot-{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ') }}"
+wazuh_indexer_snapshot_indices: "wazuh-alerts-*,wazuh-archives-*,wazuh-monitoring-*,wazuh-statistics-*"
+wazuh_indexer_snapshot_include_global_state: false
+wazuh_indexer_snapshot_wait_for_completion: true
+wazuh_indexer_snapshot_restore_confirm: ""
+wazuh_indexer_snapshot_restore_required_confirm: "RESTORE_WAZUH_INDEXER_SNAPSHOT"
+wazuh_indexer_snapshot_restore_name: ""
+wazuh_indexer_snapshot_restore_indices: "{{ wazuh_indexer_snapshot_indices }}"
+wazuh_indexer_snapshot_restore_include_global_state: false
+wazuh_indexer_snapshot_restore_wait_for_completion: true
+wazuh_indexer_snapshot_restore_rename_pattern: "(.+)"
+wazuh_indexer_snapshot_restore_rename_replacement: "restored-$1"
+
+wazuh_dashboard_public_fqdn: ""
+wazuh_dashboard_public_url: "{{ 'https://' ~ wazuh_dashboard_public_fqdn if (wazuh_dashboard_public_fqdn | default('') | length > 0) else '' }}"
+wazuh_dashboard_tls_enabled: false
+wazuh_dashboard_tls_cert_src: ""
+wazuh_dashboard_tls_key_src: ""
+wazuh_dashboard_tls_ca_src: ""
+wazuh_dashboard_tls_cert_content: ""
+wazuh_dashboard_tls_key_content: ""
+wazuh_dashboard_tls_ca_content: ""
+wazuh_dashboard_tls_dir: "/etc/wazuh-dashboard/certs"
+wazuh_dashboard_tls_cert_path: "{{ wazuh_dashboard_tls_dir }}/dashboard.pem"
+wazuh_dashboard_tls_key_path: "{{ wazuh_dashboard_tls_dir }}/dashboard-key.pem"
+wazuh_dashboard_tls_ca_path: "{{ wazuh_dashboard_tls_dir }}/dashboard-ca.pem"
+wazuh_dashboard_verify_public_dns: false
+wazuh_dashboard_verify_public_tls: false
+wazuh_dashboard_verify_tls_validate_certs: true
+wazuh_dashboard_verify_tls_cacert: ""
 
 wazuh_dashboard_port: 443
 wazuh_dashboard_backend_firewall_enabled: false
 wazuh_dashboard_backend_firewall_allowed_sources: []
+wazuh_backend_firewall_enabled: false
+wazuh_backend_firewall_extra_allowed_sources: []
+wazuh_backend_firewall_manager_ports:
+  - 1514
+  - 1515
+  - 1516
+  - 55000
+wazuh_backend_firewall_indexer_ports:
+  - 9200
+  - 9300
 wazuh_load_balancer_engine: "haproxy"
 wazuh_enable_keepalived: false
 wazuh_lb_virtual_ip: ""
@@ -32,9 +114,19 @@ wazuh_lb_agent_enrollment_frontend_port: 1515
 wazuh_lb_api_frontend_port: 55000
 wazuh_lb_dashboard_frontend_port: 443
 wazuh_lb_indexer_api_frontend_port: 9200
+wazuh_lb_agent_events_balance: source
+wazuh_lb_agent_enrollment_balance: leastconn
+wazuh_lb_agent_enrollment_include_workers: false
 wazuh_lb_1514_to_workers_only: true
 wazuh_lb_1514_master_backup: true
 wazuh_lb_expose_indexer_api: false
+wazuh_agent_public_fqdn: ""
+wazuh_agent_load_balancer_address: "{{ wazuh_agent_public_fqdn if (wazuh_agent_public_fqdn | default('') | length > 0) else (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) }}"
+wazuh_agent_connection_protocol: "tcp"
+wazuh_agent_notify_time: 10
+wazuh_agent_time_reconnect: 10
+wazuh_agent_auto_restart: "yes"
+wazuh_agent_crypto_method: "aes"
 
 # Aggressive HA defaults for short lab/production failover windows.
 # Raise these values if your network is noisy and Keepalived flaps.
@@ -54,6 +146,39 @@ wazuh_keepalived_garp_master_repeat: 5
 wazuh_keepalived_garp_master_refresh: 10
 wazuh_keepalived_garp_master_refresh_repeat: 2
 wazuh_keepalived_unicast_enabled: false
+wazuh_keepalived_nopreempt: true
+wazuh_keepalived_preempt_delay: 0
+wazuh_keepalived_track_frontend_ports: []
+wazuh_ha_validation_report_dir: "{{ playbook_dir }}/../.reports/wazuh-ha"
+wazuh_ha_validation_require_single_vip_owner: true
+wazuh_ha_validation_endpoint_timeout: 20
+wazuh_ha_validation_controlled_failover_enabled: false
+wazuh_ha_validation_controlled_failover_confirm: ""
+wazuh_ha_validation_controlled_failover_required_confirm: "RUN_WAZUH_CONTROLLED_FAILOVER"
+wazuh_ha_validation_controlled_failover_target: ""
+wazuh_ha_validation_controlled_failover_wait_seconds: 5
+wazuh_ha_validation_controlled_failover_restore: true
+wazuh_ha_monitoring_enabled: true
+wazuh_ha_monitoring_interval: "60s"
+wazuh_ha_monitoring_on_boot: "2min"
+wazuh_ha_monitoring_randomized_delay: "10s"
+wazuh_ha_monitoring_run_immediately: true
+wazuh_ha_monitoring_fail_on_initial_error: false
+wazuh_ha_monitoring_log_facility: "local0"
+wazuh_ha_monitoring_webhook_url: ""
+wazuh_ha_monitoring_webhook_headers: {}
+wazuh_ha_monitoring_connect_timeout: 3
+wazuh_ha_monitoring_disk_warning_percent: 85
+wazuh_ha_monitoring_disk_critical_percent: 95
+wazuh_ha_monitoring_disk_paths:
+  - /
+  - /var
+  - /var/ossec
+  - /var/lib/wazuh-indexer
+wazuh_ha_monitoring_indexer_expected_nodes: "{{ groups.get('wazuh_indexers', []) | length }}"
+wazuh_ha_monitoring_indexer_required_status: "{{ 'green' if (wazuh_indexer_require_green | default(true) | bool) else 'yellow' }}"
+wazuh_ha_monitoring_manager_expected_nodes: "{{ groups.get('wazuh_managers', []) | length }}"
+wazuh_ha_monitoring_check_vip_ports: true
 
 # Official central-component OS list reflected from current Wazuh docs.
 wazuh_official_central_os:

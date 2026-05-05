@@ -1,0 +1,40 @@
+---
+- name: Require Wazuh indexer snapshot repository
+  ansible.builtin.assert:
+    that:
+      - wazuh_indexer_snapshot_repository_enabled | default(false) | bool
+      - wazuh_indexer_snapshot_repository_name | default('') | length > 0
+      - wazuh_indexer_snapshot_name | default('') | length > 0
+    fail_msg: >-
+      Enable wazuh_indexer_snapshot_repository_enabled and set
+      wazuh_indexer_snapshot_repository_name before creating snapshots.
+
+- name: Determine Wazuh indexer snapshot name
+  ansible.builtin.set_fact:
+    wazuh_indexer_snapshot_name_effective: "{{ wazuh_indexer_snapshot_name }}"
+
+- name: Create Wazuh indexer snapshot
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_snapshot/{{ wazuh_indexer_snapshot_repository_name }}/{{ wazuh_indexer_snapshot_name_effective }}?wait_for_completion={{ 'true' if (wazuh_indexer_snapshot_wait_for_completion | default(true) | bool) else 'false' }}"
+    method: PUT
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    body_format: json
+    body:
+      indices: "{{ wazuh_indexer_snapshot_indices }}"
+      ignore_unavailable: true
+      include_global_state: "{{ wazuh_indexer_snapshot_include_global_state | default(false) | bool }}"
+    return_content: true
+    status_code:
+      - 200
+      - 201
+      - 202
+  register: wazuh_indexer_snapshot_result
+  changed_when: true
+
+- name: Report Wazuh indexer snapshot
+  ansible.builtin.debug:
+    msg: >-
+      Snapshot {{ wazuh_indexer_snapshot_name_effective }} requested in repository
+      {{ wazuh_indexer_snapshot_repository_name }}. Response={{ wazuh_indexer_snapshot_result.json | default({}) }}.

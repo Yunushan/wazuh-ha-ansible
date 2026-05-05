@@ -1,0 +1,85 @@
+---
+- name: Build Wazuh backend firewall protected port list
+  ansible.builtin.set_fact:
+    wazuh_backend_firewall_protected_ports: >-
+      {{
+        []
+        + ((wazuh_backend_firewall_manager_ports | default([1514, 1515, 1516, 55000])) if ('wazuh_managers' in group_names) else [])
+        + ((wazuh_backend_firewall_indexer_ports | default([9200, 9300])) if ('wazuh_indexers' in group_names) else [])
+        + ([wazuh_dashboard_port | default(443) | int] if ('wazuh_dashboards' in group_names) else [])
+      }}
+
+- name: Normalize Wazuh backend firewall protected ports
+  ansible.builtin.set_fact:
+    wazuh_backend_firewall_protected_ports: "{{ wazuh_backend_firewall_protected_ports | map('int') | unique | sort | list }}"
+
+- name: Configure Wazuh backend firewall
+  when:
+    - wazuh_backend_firewall_enabled | default(false) | bool
+    - wazuh_backend_firewall_protected_ports | length > 0
+  block:
+    - name: Install nftables for Wazuh backend firewall
+      ansible.builtin.package:
+        name: nftables
+        state: present
+
+    - name: Ensure nftables include directory exists
+      ansible.builtin.file:
+        path: /etc/nftables.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render Wazuh backend nftables rules
+      ansible.builtin.template:
+        src: wazuh-backend-firewall.nft.j2
+        dest: /etc/nftables.d/wazuh-backend-firewall.nft
+        owner: root
+        group: root
+        mode: "0644"
+      register: wazuh_backend_firewall_rules
+
+    - name: Validate Wazuh backend nftables rules
+      ansible.builtin.command:
+        cmd: nft -c -f /etc/nftables.d/wazuh-backend-firewall.nft
+      changed_when: false
+
+    - name: Install Wazuh backend firewall systemd unit
+      ansible.builtin.template:
+        src: wazuh-backend-firewall.service.j2
+        dest: /etc/systemd/system/wazuh-backend-firewall.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: wazuh_backend_firewall_unit
+
+    - name: Enable Wazuh backend firewall
+      ansible.builtin.systemd:
+        name: wazuh-backend-firewall
+        enabled: true
+        state: "{{ 'restarted' if (wazuh_backend_firewall_rules.changed or wazuh_backend_firewall_unit.changed) else 'started' }}"
+        daemon_reload: true
+
+- name: Remove Wazuh backend firewall
+  when: not (wazuh_backend_firewall_enabled | default(false) | bool)
+  block:
+    - name: Disable Wazuh backend firewall unit
+      ansible.builtin.systemd:
+        name: wazuh-backend-firewall
+        enabled: false
+        state: stopped
+        daemon_reload: true
+      failed_when: false
+
+    - name: Remove Wazuh backend firewall files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nftables.d/wazuh-backend-firewall.nft
+        - /etc/systemd/system/wazuh-backend-firewall.service
+
+    - name: Reload systemd after Wazuh backend firewall removal
+      ansible.builtin.systemd:
+        daemon_reload: true

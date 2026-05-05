@@ -1,0 +1,289 @@
+---
+- name: Determine HA validation topology facts
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_indexers: "{{ groups.get('wazuh_indexers', []) }}"
+    wazuh_ha_validation_managers: "{{ groups.get('wazuh_managers', []) }}"
+    wazuh_ha_validation_dashboards: "{{ groups.get('wazuh_dashboards', []) }}"
+    wazuh_ha_validation_lbs: "{{ groups.get('wazuh_loadbalancers', []) }}"
+    wazuh_ha_validation_first_lb: "{{ groups.get('wazuh_loadbalancers', [''])[0] }}"
+    wazuh_ha_validation_first_indexer: "{{ groups.get('wazuh_indexers', [''])[0] }}"
+    wazuh_ha_validation_first_manager: "{{ groups.get('wazuh_managers', [''])[0] }}"
+    wazuh_ha_validation_vip: "{{ wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '') }}"
+    wazuh_ha_validation_keepalived_enabled: "{{ (wazuh_enable_keepalived | default(false) | bool) or (wazuh_lb_virtual_ip | default('') | length > 0) }}"
+
+- name: Build manager master host list
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_manager_masters: "{{ (wazuh_ha_validation_manager_masters | default([])) + ([item] if (hostvars[item].wazuh_manager_type | default('worker')) == 'master' else []) }}"
+  loop: "{{ wazuh_ha_validation_managers }}"
+
+- name: Validate HA inventory shape
+  ansible.builtin.assert:
+    that:
+      - wazuh_ha_validation_indexers | length >= 1
+      - wazuh_ha_validation_managers | length >= 1
+      - wazuh_ha_validation_dashboards | length >= 1
+      - wazuh_ha_validation_lbs | length >= 1
+      - wazuh_ha_validation_manager_masters | default([]) | length == 1
+      - not (wazuh_ha_validation_keepalived_enabled | bool) or wazuh_ha_validation_vip | length > 0
+    fail_msg: >-
+      HA validation requires indexer, manager, dashboard, and load balancer
+      groups, exactly one manager master, and a VIP when Keepalived is enabled.
+
+- name: Determine HA validation load balancer effective ports
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_lb_effective_bind_address: "{{ (wazuh_ha_validation_vip if (wazuh_lb_bind_to_vip | default(false) | bool) else (wazuh_lb_bind_address | default('*', true))) }}"
+    wazuh_ha_validation_first_lb_ip: "{{ hostvars[wazuh_ha_validation_first_lb].wazuh_node_ip | default(hostvars[wazuh_ha_validation_first_lb].ansible_host | default(wazuh_ha_validation_first_lb)) }}"
+
+- name: Determine HA validation load balancer node-address behavior
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_check_node_address_frontends: "{{ wazuh_ha_validation_lb_effective_bind_address in ['*', '0.0.0.0', '::', wazuh_ha_validation_first_lb_ip] }}"
+
+- name: Determine HA validation frontend ports
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_avoid_converged_conflicts: "{{ wazuh_ha_validation_check_node_address_frontends | bool }}"
+    wazuh_ha_validation_agent_events_port: "{{ 15140 if (wazuh_ha_validation_check_node_address_frontends | bool and wazuh_ha_validation_first_lb in groups.get('wazuh_managers', []) and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
+    wazuh_ha_validation_agent_enrollment_port: "{{ 15150 if (wazuh_ha_validation_check_node_address_frontends | bool and wazuh_ha_validation_first_lb in groups.get('wazuh_managers', []) and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
+    wazuh_ha_validation_api_port: "{{ 55001 if (wazuh_ha_validation_check_node_address_frontends | bool and wazuh_ha_validation_first_lb in groups.get('wazuh_managers', []) and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
+    wazuh_ha_validation_dashboard_port: "{{ 8443 if (wazuh_ha_validation_check_node_address_frontends | bool and wazuh_ha_validation_first_lb in groups.get('wazuh_dashboards', []) and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
+    wazuh_ha_validation_indexer_api_port: "{{ 9201 if (wazuh_ha_validation_check_node_address_frontends | bool and wazuh_lb_expose_indexer_api | default(false) | bool and wazuh_ha_validation_first_lb in groups.get('wazuh_indexers', []) and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
+
+- name: Build HA validation frontend port list
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_frontend_ports: >-
+      {{
+        [
+          wazuh_ha_validation_agent_events_port | int,
+          wazuh_ha_validation_agent_enrollment_port | int,
+          wazuh_ha_validation_api_port | int,
+          wazuh_ha_validation_dashboard_port | int
+        ]
+        + ([wazuh_ha_validation_indexer_api_port | int] if (wazuh_lb_expose_indexer_api | default(false) | bool) else [])
+      }}
+
+- name: Check Wazuh indexer services
+  ansible.builtin.command:
+    cmd: systemctl is-active wazuh-indexer
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_indexers }}"
+  register: wazuh_ha_validation_indexer_services
+  changed_when: false
+  failed_when: wazuh_ha_validation_indexer_services.stdout | default('') != 'active'
+
+- name: Check Wazuh manager services
+  ansible.builtin.command:
+    cmd: "systemctl is-active {{ item.1 }}"
+  delegate_to: "{{ item.0 }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_managers | product(['wazuh-manager', 'filebeat']) | list }}"
+  register: wazuh_ha_validation_manager_services
+  changed_when: false
+  failed_when: wazuh_ha_validation_manager_services.stdout | default('') != 'active'
+
+- name: Check Wazuh dashboard services
+  ansible.builtin.command:
+    cmd: systemctl is-active wazuh-dashboard
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_dashboards }}"
+  register: wazuh_ha_validation_dashboard_services
+  changed_when: false
+  failed_when: wazuh_ha_validation_dashboard_services.stdout | default('') != 'active'
+
+- name: Check load balancer services
+  ansible.builtin.command:
+    cmd: "systemctl is-active {{ wazuh_load_balancer_engine }}"
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_lbs }}"
+  register: wazuh_ha_validation_lb_services
+  changed_when: false
+  failed_when: wazuh_ha_validation_lb_services.stdout | default('') != 'active'
+  when: wazuh_load_balancer_engine in ['haproxy', 'nginx']
+
+- name: Check Keepalived services
+  ansible.builtin.command:
+    cmd: systemctl is-active keepalived
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_lbs }}"
+  register: wazuh_ha_validation_keepalived_services
+  changed_when: false
+  failed_when: wazuh_ha_validation_keepalived_services.stdout | default('') != 'active'
+  when: wazuh_ha_validation_keepalived_enabled | bool
+
+- name: Check Keepalived load balancer health scripts
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/wazuh-keepalived-check-lb
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_lbs }}"
+  register: wazuh_ha_validation_keepalived_lb_checks
+  changed_when: false
+  when:
+    - wazuh_ha_validation_keepalived_enabled | bool
+    - wazuh_load_balancer_engine in ['haproxy', 'nginx']
+
+- name: Collect load balancer interface addresses
+  ansible.builtin.command:
+    cmd: "ip -o address show dev {{ wazuh_keepalived_interface | default('eth0') }}"
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ wazuh_ha_validation_lbs }}"
+  register: wazuh_ha_validation_lb_addresses
+  changed_when: false
+  failed_when: false
+  when: wazuh_ha_validation_keepalived_enabled | bool
+
+- name: Initialize current VIP owner list
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_vip_owner_hosts: []
+  when: wazuh_ha_validation_keepalived_enabled | bool
+
+- name: Build current VIP owner list
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_vip_owner_hosts: "{{ (wazuh_ha_validation_vip_owner_hosts | default([])) + ([item.item] if (wazuh_ha_validation_vip in (item.stdout | default(''))) else []) }}"
+  loop: "{{ wazuh_ha_validation_lb_addresses.results | default([]) }}"
+  when: wazuh_ha_validation_keepalived_enabled | bool
+
+- name: Validate current VIP ownership
+  ansible.builtin.assert:
+    that:
+      - wazuh_ha_validation_vip_owner_hosts | default([]) | length > 0
+      - not (wazuh_ha_validation_require_single_vip_owner | default(true) | bool) or wazuh_ha_validation_vip_owner_hosts | length == 1
+    fail_msg: >-
+      VIP {{ wazuh_ha_validation_vip }} ownership is unhealthy. Owners={{ wazuh_ha_validation_vip_owner_hosts | default([]) }}.
+      Expected exactly one owner unless wazuh_ha_validation_require_single_vip_owner=false.
+    success_msg: "VIP {{ wazuh_ha_validation_vip }} owner={{ wazuh_ha_validation_vip_owner_hosts | join(', ') }}."
+  when: wazuh_ha_validation_keepalived_enabled | bool
+
+- name: Wait for HA frontend ports
+  ansible.builtin.wait_for:
+    host: "{{ wazuh_ha_validation_vip if (wazuh_ha_validation_keepalived_enabled | bool) else wazuh_ha_validation_first_lb_ip }}"
+    port: "{{ item }}"
+    timeout: "{{ wazuh_ha_validation_endpoint_timeout | default(20) }}"
+  loop: "{{ wazuh_ha_validation_frontend_ports }}"
+
+- name: Check Wazuh manager cluster membership
+  ansible.builtin.command:
+    cmd: /var/ossec/bin/cluster_control -l
+  delegate_to: "{{ wazuh_ha_validation_first_manager }}"
+  become: true
+  register: wazuh_ha_validation_manager_cluster
+  changed_when: false
+
+- name: Validate Wazuh manager names are visible in cluster membership
+  ansible.builtin.assert:
+    that:
+      - (hostvars[item].wazuh_manager_name | default(item)) in wazuh_ha_validation_manager_cluster.stdout
+    fail_msg: >-
+      Manager {{ hostvars[item].wazuh_manager_name | default(item) }} is not visible in
+      cluster_control output from {{ wazuh_ha_validation_first_manager }}.
+  loop: "{{ wazuh_ha_validation_managers }}"
+
+- name: Check Wazuh indexer cluster health
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[wazuh_ha_validation_first_indexer].wazuh_node_ip | default(hostvars[wazuh_ha_validation_first_indexer].ansible_host | default(wazuh_ha_validation_first_indexer)) }}:9200/_cluster/health?wait_for_status={{ 'green' if (wazuh_indexer_require_green | default(true) | bool) else 'yellow' }}&wait_for_nodes=%3E%3D{{ wazuh_ha_validation_indexers | length }}&timeout={{ wazuh_indexer_health_wait_timeout | default(180) }}s"
+    method: GET
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  delegate_to: "{{ wazuh_ha_validation_first_indexer }}"
+  become: true
+  register: wazuh_ha_validation_indexer_health
+  changed_when: false
+
+- name: Validate Wazuh indexer health response
+  ansible.builtin.assert:
+    that:
+      - ((wazuh_ha_validation_indexer_health.json | default({})).get('number_of_nodes', 0) | int) >= (wazuh_ha_validation_indexers | length | int)
+      - (wazuh_ha_validation_indexer_health.json | default({})).get('status', '') in (['green'] if (wazuh_indexer_require_green | default(true) | bool) else ['green', 'yellow'])
+    fail_msg: "Indexer health failed HA validation: {{ wazuh_ha_validation_indexer_health.json | default({}) }}."
+
+- name: Require explicit confirmation before controlled failover
+  ansible.builtin.assert:
+    that:
+      - wazuh_ha_validation_controlled_failover_confirm | default('') == wazuh_ha_validation_controlled_failover_required_confirm | default('RUN_WAZUH_CONTROLLED_FAILOVER')
+      - wazuh_ha_validation_keepalived_enabled | bool
+      - wazuh_ha_validation_lbs | length > 1
+    fail_msg: >-
+      Controlled failover stops Keepalived on one load balancer. Re-run with
+      -e wazuh_ha_validation_controlled_failover_enabled=true
+      -e wazuh_ha_validation_controlled_failover_confirm={{ wazuh_ha_validation_controlled_failover_required_confirm | default('RUN_WAZUH_CONTROLLED_FAILOVER') }}
+      and at least two load balancers.
+  when: wazuh_ha_validation_controlled_failover_enabled | default(false) | bool
+
+- name: Select controlled failover target
+  ansible.builtin.set_fact:
+    wazuh_ha_validation_failover_target_effective: "{{ wazuh_ha_validation_controlled_failover_target if (wazuh_ha_validation_controlled_failover_target | default('') | length > 0) else (wazuh_ha_validation_vip_owner_hosts | default([]))[0] }}"
+  when: wazuh_ha_validation_controlled_failover_enabled | default(false) | bool
+
+- name: Run controlled Keepalived failover test
+  when: wazuh_ha_validation_controlled_failover_enabled | default(false) | bool
+  block:
+    - name: Stop Keepalived on controlled failover target
+      ansible.builtin.service:
+        name: keepalived
+        state: stopped
+      delegate_to: "{{ wazuh_ha_validation_failover_target_effective }}"
+      become: true
+
+    - name: Wait for controlled failover election
+      ansible.builtin.pause:
+        seconds: "{{ wazuh_ha_validation_controlled_failover_wait_seconds | default(5) }}"
+
+    - name: Collect load balancer addresses after controlled failover
+      ansible.builtin.command:
+        cmd: "ip -o address show dev {{ wazuh_keepalived_interface | default('eth0') }}"
+      delegate_to: "{{ item }}"
+      become: true
+      loop: "{{ wazuh_ha_validation_lbs }}"
+      register: wazuh_ha_validation_failover_lb_addresses
+      changed_when: false
+      failed_when: false
+
+    - name: Initialize controlled failover VIP owner list
+      ansible.builtin.set_fact:
+        wazuh_ha_validation_failover_vip_owner_hosts: []
+
+    - name: Build controlled failover VIP owner list
+      ansible.builtin.set_fact:
+        wazuh_ha_validation_failover_vip_owner_hosts: "{{ (wazuh_ha_validation_failover_vip_owner_hosts | default([])) + ([item.item] if (wazuh_ha_validation_vip in (item.stdout | default(''))) else []) }}"
+      loop: "{{ wazuh_ha_validation_failover_lb_addresses.results | default([]) }}"
+
+    - name: Validate controlled failover VIP ownership
+      ansible.builtin.assert:
+        that:
+          - wazuh_ha_validation_failover_vip_owner_hosts | default([]) | length == 1
+          - wazuh_ha_validation_failover_target_effective not in wazuh_ha_validation_failover_vip_owner_hosts
+        fail_msg: >-
+          Controlled failover failed. Target={{ wazuh_ha_validation_failover_target_effective }},
+          owners={{ wazuh_ha_validation_failover_vip_owner_hosts | default([]) }}.
+        success_msg: "Controlled failover moved VIP to {{ wazuh_ha_validation_failover_vip_owner_hosts | join(', ') }}."
+
+    - name: Wait for HA frontend ports after controlled failover
+      ansible.builtin.wait_for:
+        host: "{{ wazuh_ha_validation_vip }}"
+        port: "{{ item }}"
+        timeout: "{{ wazuh_ha_validation_endpoint_timeout | default(20) }}"
+      loop: "{{ wazuh_ha_validation_frontend_ports }}"
+  always:
+    - name: Restart Keepalived on controlled failover target
+      ansible.builtin.service:
+        name: keepalived
+        state: started
+        enabled: true
+      delegate_to: "{{ wazuh_ha_validation_failover_target_effective }}"
+      become: true
+      when: wazuh_ha_validation_controlled_failover_restore | default(true) | bool
+
+- name: Report HA validation result
+  ansible.builtin.debug:
+    msg: >-
+      HA validation complete. VIP={{ wazuh_ha_validation_vip | default('n/a') }},
+      initial_owner={{ wazuh_ha_validation_vip_owner_hosts | default(['n/a']) | join(',') }},
+      controlled_failover={{ wazuh_ha_validation_controlled_failover_enabled | default(false) }},
+      indexer_status={{ (wazuh_ha_validation_indexer_health.json | default({})).get('status', 'unknown') }},
+      indexer_nodes={{ (wazuh_ha_validation_indexer_health.json | default({})).get('number_of_nodes', 'unknown') }}.

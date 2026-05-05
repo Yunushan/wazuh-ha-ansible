@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -u
+
+lb_service="{{ 'haproxy' if wazuh_load_balancer_engine == 'haproxy' else 'nginx' }}"
+bind_addr="{{ wazuh_lb_effective_bind_address | default(wazuh_lb_bind_address | default('*', true)) }}"
+{% set default_tracked_ports = [
+  wazuh_lb_effective_agent_events_frontend_port | int,
+  wazuh_lb_effective_agent_enrollment_frontend_port | int,
+  wazuh_lb_effective_api_frontend_port | int,
+  wazuh_lb_effective_dashboard_frontend_port | int
+] + ([wazuh_lb_effective_indexer_api_frontend_port | int] if (wazuh_lb_expose_indexer_api | default(false) | bool) else []) %}
+{% set tracked_ports = wazuh_keepalived_track_frontend_ports | default([]) %}
+{% if tracked_ports | length == 0 %}
+{% set tracked_ports = default_tracked_ports %}
+{% endif %}
+tracked_ports=({% for port in tracked_ports | unique %}{{ port | int }} {% endfor %})
+
+if ! systemctl is-active --quiet "${lb_service}"; then
+    exit 1
+fi
+
+if ! command -v ss >/dev/null 2>&1; then
+    exit 1
+fi
+
+listeners="$(ss -H -ltn 2>/dev/null || true)"
+if [ -z "${listeners}" ]; then
+    exit 1
+fi
+
+for port in "${tracked_ports[@]}"; do
+    if [ "${bind_addr}" = "*" ] || [ "${bind_addr}" = "0.0.0.0" ] || [ "${bind_addr}" = "::" ]; then
+        if ! printf '%s\n' "${listeners}" | grep -Eq "(^|[[:space:]])(0[.]0[.]0[.]0|[*]|\[::\]|::|[0-9a-fA-F:.]+):${port}([[:space:]]|$)"; then
+            exit 1
+        fi
+    else
+        if ! printf '%s\n' "${listeners}" | grep -Fq "${bind_addr}:${port}"; then
+            exit 1
+        fi
+    fi
+done
+
+exit 0

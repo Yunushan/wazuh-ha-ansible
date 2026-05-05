@@ -1,0 +1,7 @@
+---
+- name: Configure production dashboard DNS/TLS settings
+  hosts: wazuh_dashboards
+  become: true
+  gather_facts: false
+  roles:
+    - role: wazuh_dashboard_tls

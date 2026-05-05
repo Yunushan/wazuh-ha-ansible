@@ -283,9 +283,17 @@ wazuh-ha-ansible/
 | `playbooks/install-indexers.yml` | Install Wazuh indexers and initialize the cluster once |
 | `playbooks/install-managers.yml` | Install Wazuh manager master and workers |
 | `playbooks/install-dashboards.yml` | Install one or more Wazuh dashboard nodes |
+| `playbooks/configure-dashboard-tls.yml` | Configure dashboard public URL and production TLS certificate |
 | `playbooks/disable-repos.yml` | Disable Wazuh package repositories after all Wazuh components are installed |
 | `playbooks/install-loadbalancers.yml` | Configure HAProxy or NGINX, optionally with Keepalived VIP |
+| `playbooks/backup.yml` | Back up controller artifacts and Wazuh node configuration/secrets |
+| `playbooks/configure-indexer-snapshot-repository.yml` | Configure and register an indexer snapshot repository |
+| `playbooks/create-indexer-snapshot.yml` | Create a Wazuh indexer snapshot for Wazuh data indices |
+| `playbooks/restore-indexer-snapshot.yml` | Guarded restore of a Wazuh indexer snapshot, renamed by default |
+| `playbooks/restore-configs.yml` | Guarded restore of Wazuh node configuration archives |
 | `playbooks/verify.yml` | Perform basic port and service checks |
+| `playbooks/ha-validation.yml` | Run the full HA validation runbook and optional controlled VIP failover |
+| `playbooks/configure-monitoring.yml` | Install the node-local HA monitoring timer and optional webhook alerts |
 | `playbooks/site.yml` | Full end-to-end deployment |
 | `playbooks/uninstall.yml` | Best-effort cleanup using the Wazuh assistant uninstall option |
 

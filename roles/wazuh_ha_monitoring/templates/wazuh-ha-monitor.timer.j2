@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Wazuh HA health monitor periodically
+
+[Timer]
+OnBootSec={{ wazuh_ha_monitoring_on_boot | default('2min') }}
+OnUnitActiveSec={{ wazuh_ha_monitoring_interval | default('60s') }}
+RandomizedDelaySec={{ wazuh_ha_monitoring_randomized_delay | default('10s') }}
+Unit=wazuh-ha-monitor.service
+
+[Install]
+WantedBy=timers.target

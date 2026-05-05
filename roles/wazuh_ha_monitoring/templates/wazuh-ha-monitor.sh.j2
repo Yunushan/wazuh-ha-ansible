@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -u
+
+HOST="{{ inventory_hostname }}"
+NODE_IP="{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+VIP="{{ wazuh_ha_monitoring_vip | default(wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) }}"
+LB_ENGINE="{{ wazuh_load_balancer_engine | default('none') }}"
+LOG_FACILITY="{{ wazuh_ha_monitoring_log_facility | default('local0') }}"
+WEBHOOK_URL="{{ wazuh_ha_monitoring_webhook_url | default('') }}"
+CONNECT_TIMEOUT="{{ wazuh_ha_monitoring_connect_timeout | default(3) | int }}"
+DISK_WARNING="{{ wazuh_ha_monitoring_disk_warning_percent | default(85) | int }}"
+DISK_CRITICAL="{{ wazuh_ha_monitoring_disk_critical_percent | default(95) | int }}"
+INDEXER_EXPECTED_NODES="{{ wazuh_ha_monitoring_indexer_expected_nodes | default(groups.get('wazuh_indexers', []) | length) | int }}"
+INDEXER_REQUIRED_STATUS="{{ wazuh_ha_monitoring_indexer_required_status | default('green') }}"
+MANAGER_EXPECTED_NODES="{{ wazuh_ha_monitoring_manager_expected_nodes | default(groups.get('wazuh_managers', []) | length) | int }}"
+CHECK_VIP_PORTS="{{ '1' if (wazuh_ha_monitoring_check_vip_ports | default(true) | bool) else '0' }}"
+IS_INDEXER="{{ '1' if 'wazuh_indexers' in group_names else '0' }}"
+IS_MANAGER="{{ '1' if 'wazuh_managers' in group_names else '0' }}"
+IS_DASHBOARD="{{ '1' if 'wazuh_dashboards' in group_names else '0' }}"
+IS_LB="{{ '1' if 'wazuh_loadbalancers' in group_names else '0' }}"
+KEEPALIVED_ENABLED="{{ '1' if ((wazuh_enable_keepalived | default(false) | bool) or (wazuh_lb_virtual_ip | default('') | length > 0)) else '0' }}"
+FRONTEND_PORTS=({% for port in wazuh_ha_monitoring_frontend_ports | default([]) | unique %}{{ port | int }} {% endfor %})
+DISK_PATHS=({% for path in wazuh_ha_monitoring_disk_paths | default(['/','/var','/var/ossec','/var/lib/wazuh-indexer']) %}"{{ path }}" {% endfor %})
+
+issues=()
+
+add_issue() {
+    local message="$1"
+    issues+=("${message}")
+    logger -p "${LOG_FACILITY}.err" -t wazuh-ha-monitor "${HOST}: ${message}"
+}
+
+check_service() {
+    local service="$1"
+    if ! systemctl is-active --quiet "${service}"; then
+        add_issue "service ${service} is not active"
+    fi
+}
+
+check_tcp_port() {
+    local host="$1"
+    local port="$2"
+    local label="$3"
+    if ! timeout "${CONNECT_TIMEOUT}" bash -c ":</dev/tcp/${host}/${port}" >/dev/null 2>&1; then
+        add_issue "${label} ${host}:${port} is not reachable"
+    fi
+}
+
+check_disk_usage() {
+    local path="$1"
+    [ -e "${path}" ] || return 0
+    local usage
+    usage="$(df -P "${path}" 2>/dev/null | awk 'NR==2 { gsub("%", "", $5); print $5 }')"
+    [ -n "${usage}" ] || return 0
+    if [ "${usage}" -ge "${DISK_CRITICAL}" ]; then
+        add_issue "disk ${path} usage is critical at ${usage}%"
+    elif [ "${usage}" -ge "${DISK_WARNING}" ]; then
+        add_issue "disk ${path} usage is warning at ${usage}%"
+    fi
+}
+
+json_value() {
+    local key="$1"
+    python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(sys.argv[1], ""))' "${key}" 2>/dev/null
+}
+
+post_webhook() {
+    [ -n "${WEBHOOK_URL}" ] || return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    local joined
+    joined="$(printf '%s\n' "${issues[@]}")"
+    python3 - "${WEBHOOK_URL}" "${HOST}" "${joined}" <<'PY' >/dev/null 2>&1 || true
+import json
+import sys
+import urllib.request
+
+url, host, message = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = json.dumps({"source": "wazuh-ha-monitor", "host": host, "status": "critical", "message": message}).encode()
+headers = {"Content-Type": "application/json"}
+{% for key, value in wazuh_ha_monitoring_webhook_headers | default({}) | dictsort %}
+headers[{{ key | to_json }}] = {{ value | to_json }}
+{% endfor %}
+req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+urllib.request.urlopen(req, timeout={{ wazuh_ha_monitoring_connect_timeout | default(3) | int }}).read()
+PY
+}
+
+if [ "${IS_INDEXER}" = "1" ]; then
+    check_service wazuh-indexer
+fi
+
+if [ "${IS_MANAGER}" = "1" ]; then
+    check_service wazuh-manager
+    check_service filebeat
+fi
+
+if [ "${IS_DASHBOARD}" = "1" ]; then
+    check_service wazuh-dashboard
+fi
+
+if [ "${IS_LB}" = "1" ] && [ "${LB_ENGINE}" = "haproxy" ]; then
+    check_service haproxy
+fi
+
+if [ "${IS_LB}" = "1" ] && [ "${LB_ENGINE}" = "nginx" ]; then
+    check_service nginx
+fi
+
+if [ "${IS_LB}" = "1" ] && [ "${KEEPALIVED_ENABLED}" = "1" ]; then
+    check_service keepalived
+    if [ -x /usr/local/sbin/wazuh-keepalived-check-lb ]; then
+        /usr/local/sbin/wazuh-keepalived-check-lb >/dev/null 2>&1 || add_issue "keepalived load balancer health script failed"
+    fi
+fi
+
+for path in "${DISK_PATHS[@]}"; do
+    check_disk_usage "${path}"
+done
+
+if [ "${IS_LB}" = "1" ] && [ "${CHECK_VIP_PORTS}" = "1" ] && [ -n "${VIP}" ]; then
+    for port in "${FRONTEND_PORTS[@]}"; do
+        check_tcp_port "${VIP}" "${port}" "VIP frontend"
+    done
+fi
+
+if [ "${IS_INDEXER}" = "1" ] && [ -r /etc/wazuh-indexer/certs/admin.pem ] && [ -r /etc/wazuh-indexer/certs/admin-key.pem ]; then
+    health="$(curl -sk --max-time "${CONNECT_TIMEOUT}" --cert /etc/wazuh-indexer/certs/admin.pem --key /etc/wazuh-indexer/certs/admin-key.pem "https://${NODE_IP}:9200/_cluster/health" 2>/dev/null || true)"
+    if [ -z "${health}" ]; then
+        add_issue "indexer cluster health API did not answer"
+    else
+        status="$(printf '%s' "${health}" | json_value status)"
+        nodes="$(printf '%s' "${health}" | json_value number_of_nodes)"
+        if [ "${INDEXER_REQUIRED_STATUS}" = "green" ] && [ "${status}" != "green" ]; then
+            add_issue "indexer cluster status is ${status}, expected green"
+        elif [ "${INDEXER_REQUIRED_STATUS}" = "yellow" ] && [ "${status}" != "green" ] && [ "${status}" != "yellow" ]; then
+            add_issue "indexer cluster status is ${status}, expected yellow or green"
+        fi
+        if [ -n "${nodes}" ] && [ "${nodes}" -lt "${INDEXER_EXPECTED_NODES}" ]; then
+            add_issue "indexer cluster has ${nodes} nodes, expected ${INDEXER_EXPECTED_NODES}"
+        fi
+    fi
+fi
+
+if [ "${IS_MANAGER}" = "1" ] && [ -x /var/ossec/bin/cluster_control ]; then
+    manager_cluster="$(/var/ossec/bin/cluster_control -l 2>/dev/null || true)"
+    manager_count="$(printf '%s\n' "${manager_cluster}" | awk 'NR > 1 && $1 != "" { count++ } END { print count + 0 }')"
+    if [ "${manager_count}" -lt "${MANAGER_EXPECTED_NODES}" ]; then
+        add_issue "manager cluster shows ${manager_count} nodes, expected ${MANAGER_EXPECTED_NODES}"
+    fi
+fi
+
+if [ "${#issues[@]}" -eq 0 ]; then
+    logger -p "${LOG_FACILITY}.info" -t wazuh-ha-monitor "${HOST}: OK"
+    echo "OK"
+    exit 0
+fi
+
+post_webhook
+printf 'CRITICAL\n'
+printf '%s\n' "${issues[@]}"
+exit 2

@@ -1,0 +1,11 @@
+<client>
+  <server>
+    <address>{{ wazuh_agent_load_balancer_address }}</address>
+    <port>{{ wazuh_lb_agent_events_frontend_port | default(1514) }}</port>
+    <protocol>{{ wazuh_agent_connection_protocol | default('tcp') }}</protocol>
+  </server>
+  <notify_time>{{ wazuh_agent_notify_time | default(10) }}</notify_time>
+  <time-reconnect>{{ wazuh_agent_time_reconnect | default(10) }}</time-reconnect>
+  <auto_restart>{{ wazuh_agent_auto_restart | default('yes') }}</auto_restart>
+  <crypto_method>{{ wazuh_agent_crypto_method | default('aes') }}</crypto_method>
+</client>

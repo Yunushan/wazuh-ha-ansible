@@ -1,0 +1,140 @@
+---
+- name: Validate Wazuh dashboard TLS inputs
+  ansible.builtin.assert:
+    that:
+      - (wazuh_dashboard_tls_cert_src | default('') | length > 0) or (wazuh_dashboard_tls_cert_content | default('') | length > 0)
+      - (wazuh_dashboard_tls_key_src | default('') | length > 0) or (wazuh_dashboard_tls_key_content | default('') | length > 0)
+    fail_msg: >-
+      Set wazuh_dashboard_tls_cert_src/key_src or Vault-backed
+      wazuh_dashboard_tls_cert_content/key_content when
+      wazuh_dashboard_tls_enabled=true.
+  when: wazuh_dashboard_tls_enabled | default(false) | bool
+
+- name: Ensure Wazuh dashboard TLS directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_dashboard_tls_dir }}"
+    state: directory
+    owner: root
+    group: wazuh-dashboard
+    mode: "0750"
+  when: wazuh_dashboard_tls_enabled | default(false) | bool
+
+- name: Deploy Wazuh dashboard TLS certificate from controller file
+  ansible.builtin.copy:
+    src: "{{ wazuh_dashboard_tls_cert_src }}"
+    dest: "{{ wazuh_dashboard_tls_cert_path }}"
+    owner: root
+    group: wazuh-dashboard
+    mode: "0640"
+  notify: Restart wazuh-dashboard
+  when:
+    - wazuh_dashboard_tls_enabled | default(false) | bool
+    - wazuh_dashboard_tls_cert_src | default('') | length > 0
+
+- name: Deploy Wazuh dashboard TLS certificate from variable
+  ansible.builtin.copy:
+    content: "{{ wazuh_dashboard_tls_cert_content }}"
+    dest: "{{ wazuh_dashboard_tls_cert_path }}"
+    owner: root
+    group: wazuh-dashboard
+    mode: "0640"
+  notify: Restart wazuh-dashboard
+  when:
+    - wazuh_dashboard_tls_enabled | default(false) | bool
+    - wazuh_dashboard_tls_cert_src | default('') | length == 0
+    - wazuh_dashboard_tls_cert_content | default('') | length > 0
+
+- name: Deploy Wazuh dashboard TLS private key from controller file
+  ansible.builtin.copy:
+    src: "{{ wazuh_dashboard_tls_key_src }}"
+    dest: "{{ wazuh_dashboard_tls_key_path }}"
+    owner: root
+    group: wazuh-dashboard
+    mode: "0640"
+  notify: Restart wazuh-dashboard
+  no_log: true
+  when:
+    - wazuh_dashboard_tls_enabled | default(false) | bool
+    - wazuh_dashboard_tls_key_src | default('') | length > 0
+
+- name: Deploy Wazuh dashboard TLS private key from variable
+  ansible.builtin.copy:
+    content: "{{ wazuh_dashboard_tls_key_content }}"
+    dest: "{{ wazuh_dashboard_tls_key_path }}"
+    owner: root
+    group: wazuh-dashboard
+    mode: "0640"
+  notify: Restart wazuh-dashboard
+  no_log: true
+  when:
+    - wazuh_dashboard_tls_enabled | default(false) | bool
+    - wazuh_dashboard_tls_key_src | default('') | length == 0
+    - wazuh_dashboard_tls_key_content | default('') | length > 0
+
+- name: Deploy Wazuh dashboard TLS CA chain from controller file
+  ansible.builtin.copy:
+    src: "{{ wazuh_dashboard_tls_ca_src }}"
+    dest: "{{ wazuh_dashboard_tls_ca_path }}"
+    owner: root
+    group: wazuh-dashboard
+    mode: "0640"
+  notify: Restart wazuh-dashboard
+  when:
+    - wazuh_dashboard_tls_enabled | default(false) | bool
+    - wazuh_dashboard_tls_ca_src | default('') | length > 0
+
+- name: Deploy Wazuh dashboard TLS CA chain from variable
+  ansible.builtin.copy:
+    content: "{{ wazuh_dashboard_tls_ca_content }}"
+    dest: "{{ wazuh_dashboard_tls_ca_path }}"
+    owner: root
+    group: wazuh-dashboard
+    mode: "0640"
+  notify: Restart wazuh-dashboard
+  when:
+    - wazuh_dashboard_tls_enabled | default(false) | bool
+    - wazuh_dashboard_tls_ca_src | default('') | length == 0
+    - wazuh_dashboard_tls_ca_content | default('') | length > 0
+
+- name: Configure Wazuh dashboard TLS settings
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    insertafter: EOF
+    owner: wazuh-dashboard
+    group: wazuh-dashboard
+    mode: "0660"
+  loop:
+    - regexp: '^[#\s]*server[.]ssl[.]enabled:'
+      line: "server.ssl.enabled: true"
+    - regexp: '^[#\s]*server[.]ssl[.]certificate:'
+      line: "server.ssl.certificate: {{ wazuh_dashboard_tls_cert_path }}"
+    - regexp: '^[#\s]*server[.]ssl[.]key:'
+      line: "server.ssl.key: {{ wazuh_dashboard_tls_key_path }}"
+  notify: Restart wazuh-dashboard
+  when: wazuh_dashboard_tls_enabled | default(false) | bool
+
+- name: Configure Wazuh dashboard public base URL
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: '^[#\s]*server[.]publicBaseUrl:'
+    line: "server.publicBaseUrl: {{ wazuh_dashboard_public_url }}"
+    insertafter: EOF
+    owner: wazuh-dashboard
+    group: wazuh-dashboard
+    mode: "0660"
+  notify: Restart wazuh-dashboard
+  when: wazuh_dashboard_public_url | default('') | length > 0
+
+- name: Flush Wazuh dashboard TLS handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Wazuh dashboard is active after TLS configuration
+  ansible.builtin.command:
+    cmd: systemctl is-active wazuh-dashboard
+  register: wazuh_dashboard_tls_service_state
+  changed_when: false
+  failed_when: wazuh_dashboard_tls_service_state.stdout | default('') != 'active'
+  when:
+    - (wazuh_dashboard_tls_enabled | default(false) | bool) or (wazuh_dashboard_public_url | default('') | length > 0)

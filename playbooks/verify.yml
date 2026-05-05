@@ -6,11 +6,37 @@
   tasks:
     - name: Wait for indexer API port
       ansible.builtin.wait_for:
-        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        host: "{{ '127.0.0.1' if (wazuh_backend_firewall_enabled | default(false) | bool) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
         port: 9200
         timeout: 20
-      delegate_to: localhost
+      delegate_to: "{{ inventory_hostname if (wazuh_backend_firewall_enabled | default(false) | bool) else 'localhost' }}"
       become: false
+
+    - name: Check Wazuh indexer cluster health
+      ansible.builtin.uri:
+        url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_cluster/health?wait_for_status={{ 'green' if (wazuh_indexer_require_green | default(true) | bool) else 'yellow' }}{% if wazuh_indexer_wait_for_expected_nodes | default(true) | bool %}&wait_for_nodes=%3E%3D{{ groups.get('wazuh_indexers', []) | length }}{% endif %}&timeout={{ wazuh_indexer_health_wait_timeout | default(180) }}s"
+        method: GET
+        client_cert: /etc/wazuh-indexer/certs/admin.pem
+        client_key: /etc/wazuh-indexer/certs/admin-key.pem
+        validate_certs: false
+        return_content: true
+        status_code: 200
+      register: wazuh_verify_indexer_health
+      changed_when: false
+      become: true
+      run_once: true
+      when: wazuh_indexer_resilience_enabled | default(true) | bool
+
+    - name: Validate Wazuh indexer cluster node count
+      ansible.builtin.assert:
+        that:
+          - ((wazuh_verify_indexer_health.json | default({})).get('number_of_nodes', 0) | int) >= (groups.get('wazuh_indexers', []) | length | int)
+          - (wazuh_verify_indexer_health.json | default({})).get('status', '') in (['green'] if (wazuh_indexer_require_green | default(true) | bool) else ['green', 'yellow'])
+        fail_msg: >-
+          Wazuh indexer cluster is not at the requested resilience level.
+          Health={{ wazuh_verify_indexer_health.json | default({}) }}.
+      run_once: true
+      when: wazuh_indexer_resilience_enabled | default(true) | bool
 
 - name: Verify Wazuh manager ports
   hosts: wazuh_managers
@@ -19,18 +45,18 @@
   tasks:
     - name: Wait for Wazuh agent event port
       ansible.builtin.wait_for:
-        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        host: "{{ '127.0.0.1' if (wazuh_backend_firewall_enabled | default(false) | bool) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
         port: 1514
         timeout: 20
-      delegate_to: localhost
+      delegate_to: "{{ inventory_hostname if (wazuh_backend_firewall_enabled | default(false) | bool) else 'localhost' }}"
       become: false
 
     - name: Wait for Wazuh API port
       ansible.builtin.wait_for:
-        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        host: "{{ '127.0.0.1' if (wazuh_backend_firewall_enabled | default(false) | bool) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
         port: 55000
         timeout: 20
-      delegate_to: localhost
+      delegate_to: "{{ inventory_hostname if (wazuh_backend_firewall_enabled | default(false) | bool) else 'localhost' }}"
       become: false
 
 - name: Verify Wazuh dashboard ports
@@ -40,10 +66,10 @@
   tasks:
     - name: Wait for dashboard HTTPS port
       ansible.builtin.wait_for:
-        host: "{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}"
+        host: "{{ '127.0.0.1' if (wazuh_backend_firewall_enabled | default(false) | bool) else (wazuh_node_ip | default(ansible_host | default(inventory_hostname))) }}"
         port: "{{ wazuh_dashboard_port | default(443) }}"
         timeout: 20
-      delegate_to: localhost
+      delegate_to: "{{ inventory_hostname if (wazuh_backend_firewall_enabled | default(false) | bool) else 'localhost' }}"
       become: false
 
 - name: Verify load balancer VIP or node ports
@@ -62,11 +88,17 @@
 
     - name: Determine effective load balancer check ports
       ansible.builtin.set_fact:
-        wazuh_lb_check_agent_events_port: "{{ 15140 if ('wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
-        wazuh_lb_check_agent_enrollment_port: "{{ 15150 if ('wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
-        wazuh_lb_check_api_port: "{{ 55001 if ('wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
-        wazuh_lb_check_dashboard_port: "{{ 8443 if ('wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
-        wazuh_lb_check_indexer_api_port: "{{ 9201 if (wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
+        wazuh_lb_effective_bind_address: "{{ (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) if (wazuh_lb_bind_to_vip | default(false) | bool) else (wazuh_lb_bind_address | default('*', true)) }}"
+        wazuh_lb_check_node_address_frontends: "{{ ((wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '')) if (wazuh_lb_bind_to_vip | default(false) | bool) else (wazuh_lb_bind_address | default('*', true))) in ['*', '0.0.0.0', '::', wazuh_node_ip | default(ansible_host | default(inventory_hostname))] }}"
+
+    - name: Determine effective load balancer port numbers
+      ansible.builtin.set_fact:
+        wazuh_lb_avoid_converged_port_conflicts: "{{ wazuh_lb_check_node_address_frontends | default(true) | bool }}"
+        wazuh_lb_check_agent_events_port: "{{ 15140 if (wazuh_lb_check_node_address_frontends | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
+        wazuh_lb_check_agent_enrollment_port: "{{ 15150 if (wazuh_lb_check_node_address_frontends | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
+        wazuh_lb_check_api_port: "{{ 55001 if (wazuh_lb_check_node_address_frontends | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
+        wazuh_lb_check_dashboard_port: "{{ 8443 if (wazuh_lb_check_node_address_frontends | default(true) | bool and 'wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
+        wazuh_lb_check_indexer_api_port: "{{ 9201 if (wazuh_lb_check_node_address_frontends | default(true) | bool and wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
 
     - name: Show load balancer verification endpoints
       ansible.builtin.debug:
@@ -109,6 +141,44 @@
         timeout: 20
       delegate_to: localhost
       become: false
+
+    - name: Validate production dashboard endpoint settings
+      ansible.builtin.assert:
+        that:
+          - wazuh_dashboard_public_fqdn | default('') | length > 0
+          - wazuh_dashboard_public_url | default('') | length > 0
+        fail_msg: >-
+          Set wazuh_dashboard_public_fqdn and wazuh_dashboard_public_url
+          before enabling production dashboard DNS/TLS verification.
+      run_once: true
+      when:
+        - wazuh_dashboard_verify_public_dns | default(false) | bool or wazuh_dashboard_verify_public_tls | default(false) | bool
+
+    - name: Verify production dashboard DNS resolves to the VIP
+      ansible.builtin.command:
+        cmd: "getent ahostsv4 {{ wazuh_dashboard_public_fqdn }}"
+      register: wazuh_dashboard_public_dns_result
+      changed_when: false
+      failed_when: wazuh_lb_check_host not in (wazuh_dashboard_public_dns_result.stdout | default(''))
+      delegate_to: localhost
+      become: false
+      run_once: true
+      when: wazuh_dashboard_verify_public_dns | default(false) | bool
+
+    - name: Verify production dashboard TLS endpoint on the VIP
+      ansible.builtin.command:
+        cmd: >-
+          curl --fail --silent --show-error --head
+          {% if not (wazuh_dashboard_verify_tls_validate_certs | default(true) | bool) %}--insecure{% endif %}
+          {% if wazuh_dashboard_verify_tls_cacert | default('') | length > 0 %}--cacert {{ wazuh_dashboard_verify_tls_cacert }}{% endif %}
+          --resolve {{ wazuh_dashboard_public_fqdn }}:{{ wazuh_lb_check_dashboard_port }}:{{ wazuh_lb_check_host }}
+          {{ wazuh_dashboard_public_url }}
+      register: wazuh_dashboard_public_tls_result
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      run_once: true
+      when: wazuh_dashboard_verify_public_tls | default(false) | bool
 
     - name: Wait for load-balanced indexer API port
       ansible.builtin.wait_for:

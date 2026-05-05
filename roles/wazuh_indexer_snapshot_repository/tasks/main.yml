@@ -1,0 +1,43 @@
+---
+- name: Require filesystem snapshot repository
+  ansible.builtin.assert:
+    that:
+      - wazuh_indexer_snapshot_repository_enabled | default(false) | bool
+      - wazuh_indexer_snapshot_repository_type | default('fs') == 'fs'
+      - wazuh_indexer_snapshot_path | default('') | length > 0
+    fail_msg: >-
+      Set wazuh_indexer_snapshot_repository_enabled=true and use repository
+      type fs with wazuh_indexer_snapshot_path. The path must be shared or
+      externally protected storage for real disaster recovery.
+
+- name: Ensure Wazuh indexer snapshot directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_indexer_snapshot_path }}"
+    state: directory
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: "0750"
+
+- name: Configure Wazuh indexer snapshot path.repo
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: '^path[.]repo:'
+    line: 'path.repo: ["{{ wazuh_indexer_snapshot_path }}"]'
+    owner: root
+    group: wazuh-indexer
+    mode: "0660"
+  notify: Restart wazuh-indexer
+
+- name: Flush Wazuh indexer restart before snapshot repository registration
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for Wazuh indexer API after snapshot repository config
+  ansible.builtin.uri:
+    url: "https://{{ wazuh_node_ip | default(ansible_host | default(inventory_hostname)) }}:9200/_cluster/health?wait_for_status=yellow&timeout={{ wazuh_indexer_health_wait_timeout | default(180) }}s"
+    method: GET
+    client_cert: /etc/wazuh-indexer/certs/admin.pem
+    client_key: /etc/wazuh-indexer/certs/admin-key.pem
+    validate_certs: false
+    status_code: 200
+  register: wazuh_indexer_snapshot_repo_health
+  changed_when: false

@@ -1,0 +1,7 @@
+---
+- name: Restore Wazuh node configuration from backup archives
+  hosts: all_wazuh_nodes
+  become: true
+  gather_facts: false
+  roles:
+    - role: wazuh_restore_configs

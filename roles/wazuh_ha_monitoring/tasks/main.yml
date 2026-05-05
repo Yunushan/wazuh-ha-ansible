@@ -1,0 +1,122 @@
+---
+- name: Determine Wazuh HA monitoring effective state
+  ansible.builtin.set_fact:
+    wazuh_ha_monitoring_effective_enabled: "{{ wazuh_ha_monitoring_enabled | default(true) | bool }}"
+
+- name: Determine Wazuh HA monitoring bind and port facts
+  ansible.builtin.set_fact:
+    wazuh_ha_monitoring_vip: "{{ wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', '') }}"
+    wazuh_ha_monitoring_effective_bind_address: >-
+      {{
+        (wazuh_lb_virtual_ip | default('') | regex_replace('/.*$', ''))
+        if (wazuh_lb_bind_to_vip | default(false) | bool)
+        else (wazuh_lb_bind_address | default('*', true))
+      }}
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Determine whether Wazuh HA monitoring checks node-address frontends
+  ansible.builtin.set_fact:
+    wazuh_ha_monitoring_check_node_address_frontends: >-
+      {{
+        wazuh_ha_monitoring_effective_bind_address in
+        ['*', '0.0.0.0', '::', wazuh_node_ip | default(ansible_host | default(inventory_hostname))]
+      }}
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Determine Wazuh HA monitoring frontend ports
+  ansible.builtin.set_fact:
+    wazuh_ha_monitoring_agent_events_port: "{{ 15140 if (wazuh_ha_monitoring_check_node_address_frontends | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_agent_events_frontend_port | default(1514) | int) == 1514) else (wazuh_lb_agent_events_frontend_port | default(1514) | int) }}"
+    wazuh_ha_monitoring_agent_enrollment_port: "{{ 15150 if (wazuh_ha_monitoring_check_node_address_frontends | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) == 1515) else (wazuh_lb_agent_enrollment_frontend_port | default(1515) | int) }}"
+    wazuh_ha_monitoring_api_port: "{{ 55001 if (wazuh_ha_monitoring_check_node_address_frontends | default(true) | bool and 'wazuh_managers' in group_names and (wazuh_lb_api_frontend_port | default(55000) | int) == 55000) else (wazuh_lb_api_frontend_port | default(55000) | int) }}"
+    wazuh_ha_monitoring_dashboard_port: "{{ 8443 if (wazuh_ha_monitoring_check_node_address_frontends | default(true) | bool and 'wazuh_dashboards' in group_names and (wazuh_lb_dashboard_frontend_port | default(443) | int) == (wazuh_dashboard_port | default(443) | int)) else (wazuh_lb_dashboard_frontend_port | default(443) | int) }}"
+    wazuh_ha_monitoring_indexer_api_port: "{{ 9201 if (wazuh_ha_monitoring_check_node_address_frontends | default(true) | bool and wazuh_lb_expose_indexer_api | default(false) | bool and 'wazuh_indexers' in group_names and (wazuh_lb_indexer_api_frontend_port | default(9200) | int) == 9200) else (wazuh_lb_indexer_api_frontend_port | default(9200) | int) }}"
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Build Wazuh HA monitoring frontend port list
+  ansible.builtin.set_fact:
+    wazuh_ha_monitoring_frontend_ports: >-
+      {{
+        [
+          wazuh_ha_monitoring_agent_events_port | int,
+          wazuh_ha_monitoring_agent_enrollment_port | int,
+          wazuh_ha_monitoring_api_port | int,
+          wazuh_ha_monitoring_dashboard_port | int
+        ]
+        + ([wazuh_ha_monitoring_indexer_api_port | int] if (wazuh_lb_expose_indexer_api | default(false) | bool) else [])
+      }}
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Install Wazuh HA monitoring script
+  ansible.builtin.template:
+    src: wazuh-ha-monitor.sh.j2
+    dest: /usr/local/sbin/wazuh-ha-monitor
+    owner: root
+    group: root
+    mode: "0700"
+  no_log: "{{ (wazuh_ha_monitoring_webhook_url | default('') | length > 0) | bool }}"
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Install Wazuh HA monitoring service
+  ansible.builtin.template:
+    src: wazuh-ha-monitor.service.j2
+    dest: /etc/systemd/system/wazuh-ha-monitor.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Install Wazuh HA monitoring timer
+  ansible.builtin.template:
+    src: wazuh-ha-monitor.timer.j2
+    dest: /etc/systemd/system/wazuh-ha-monitor.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Enable Wazuh HA monitoring timer
+  ansible.builtin.systemd:
+    name: wazuh-ha-monitor.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: wazuh_ha_monitoring_effective_enabled | bool
+
+- name: Run Wazuh HA monitoring check once
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/wazuh-ha-monitor
+  register: wazuh_ha_monitoring_initial_check
+  changed_when: false
+  failed_when: (wazuh_ha_monitoring_fail_on_initial_error | default(false) | bool) and wazuh_ha_monitoring_initial_check.rc != 0
+  when:
+    - wazuh_ha_monitoring_effective_enabled | bool
+    - wazuh_ha_monitoring_run_immediately | default(true) | bool
+
+- name: Report initial Wazuh HA monitoring result
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} wazuh-ha-monitor rc={{ wazuh_ha_monitoring_initial_check.rc }}.
+      {{ wazuh_ha_monitoring_initial_check.stdout | default('') }}
+  when:
+    - wazuh_ha_monitoring_effective_enabled | bool
+    - wazuh_ha_monitoring_run_immediately | default(true) | bool
+    - wazuh_ha_monitoring_initial_check is defined
+
+- name: Disable Wazuh HA monitoring timer
+  ansible.builtin.systemd:
+    name: wazuh-ha-monitor.timer
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  failed_when: false
+  when: not (wazuh_ha_monitoring_effective_enabled | bool)
+
+- name: Remove Wazuh HA monitoring files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/sbin/wazuh-ha-monitor
+    - /etc/systemd/system/wazuh-ha-monitor.service
+    - /etc/systemd/system/wazuh-ha-monitor.timer
+  when: not (wazuh_ha_monitoring_effective_enabled | bool)

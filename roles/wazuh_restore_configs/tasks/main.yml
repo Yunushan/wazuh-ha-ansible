@@ -1,0 +1,75 @@
+---
+- name: Determine host restore archive path
+  ansible.builtin.set_fact:
+    wazuh_restore_archive_src_effective: "{{ (wazuh_restore_archive_src_map | default({})).get(inventory_hostname, wazuh_restore_archive_src | default('')) }}"
+
+- name: Require explicit restore confirmation
+  ansible.builtin.assert:
+    that:
+      - wazuh_restore_confirm | default('') == wazuh_restore_required_confirm | default('RESTORE_WAZUH_CONFIGS')
+      - wazuh_restore_archive_src_effective | length > 0
+    fail_msg: >-
+      Config restore is destructive. Set
+      -e wazuh_restore_confirm={{ wazuh_restore_required_confirm | default('RESTORE_WAZUH_CONFIGS') }}
+      and provide wazuh_restore_archive_src for each host.
+
+- name: Determine services to stop for restore
+  ansible.builtin.set_fact:
+    wazuh_restore_services: >-
+      {{
+        (['keepalived'] if 'wazuh_loadbalancers' in group_names and (wazuh_enable_keepalived | default(false) | bool or wazuh_lb_virtual_ip | default('') | length > 0) else [])
+        + ([wazuh_load_balancer_engine] if 'wazuh_loadbalancers' in group_names and wazuh_load_balancer_engine in ['haproxy', 'nginx'] else [])
+        + (['wazuh-dashboard'] if 'wazuh_dashboards' in group_names else [])
+        + (['filebeat', 'wazuh-manager'] if 'wazuh_managers' in group_names else [])
+        + (['wazuh-indexer'] if 'wazuh_indexers' in group_names else [])
+      }}
+
+- name: Ensure remote restore staging directory exists
+  ansible.builtin.file:
+    path: "{{ wazuh_backup_remote_dir }}/restore"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Copy restore archive to node
+  ansible.builtin.copy:
+    src: "{{ wazuh_restore_archive_src_effective }}"
+    dest: "{{ wazuh_backup_remote_dir }}/restore/{{ inventory_hostname }}-restore.tar.gz"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Stop Wazuh services before config restore
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: stopped
+  loop: "{{ wazuh_restore_services }}"
+  failed_when: false
+  when: wazuh_restore_stop_services | default(true) | bool
+
+- name: Restore Wazuh configuration archive
+  ansible.builtin.unarchive:
+    src: "{{ wazuh_backup_remote_dir }}/restore/{{ inventory_hostname }}-restore.tar.gz"
+    dest: /
+    remote_src: true
+  no_log: true
+
+- name: Reload systemd after config restore
+  ansible.builtin.systemd:
+    daemon_reload: true
+  failed_when: false
+
+- name: Restart Wazuh services after config restore
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop: "{{ wazuh_restore_services | reverse | list }}"
+  failed_when: false
+  when: wazuh_restore_restart_services | default(true) | bool
+
+- name: Report Wazuh config restore completion
+  ansible.builtin.debug:
+    msg: "Restored configuration archive on {{ inventory_hostname }}."

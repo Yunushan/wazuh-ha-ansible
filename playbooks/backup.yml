@@ -1,0 +1,14 @@
+---
+- name: Back up controller-side Wazuh artifacts
+  hosts: localhost
+  become: false
+  gather_facts: false
+  roles:
+    - role: wazuh_controller_backup
+
+- name: Back up Wazuh node configuration and secrets
+  hosts: all_wazuh_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - role: wazuh_backup
