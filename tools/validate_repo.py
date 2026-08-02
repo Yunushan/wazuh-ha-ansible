@@ -40,7 +40,7 @@ def main() -> int:
         return 1
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "MIT" not in readme or "Wazuh" not in readme:
+    if "0BSD" not in readme or "Wazuh" not in readme:
         print("README does not contain expected project markers")
         return 1
 
