@@ -41,6 +41,6 @@ ansible-playbook -i inventory/production.yml playbooks/site.yml
 
 ## الرخصة
 
-هذا المشروع الآلي منشور برخصة MIT. يبقى Wazuh خاضعاً لرخصه الخاصة.
+هذا المشروع الآلي منشور برخصة 0BSD. يبقى Wazuh خاضعاً لرخصه الخاصة.
 
 </div>
