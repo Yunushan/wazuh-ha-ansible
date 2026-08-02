@@ -17,7 +17,7 @@ Important notes reflected in this repository:
 - The Wazuh server cluster supports a master/worker model and can be combined with a network load balancer.
 - The official assisted installation flow uses `config.yml`, generates `wazuh-install-files.tar`, installs indexers, initializes the cluster once, then installs server and dashboard components.
 - The Wazuh documentation recommends disabling Wazuh package repositories after installation to avoid accidental upgrades.
-- This automation project is MIT licensed; Wazuh itself remains under its own licenses.
+- This automation project is 0BSD licensed; Wazuh itself remains under its own licenses.
 
 Upstream URLs are intentionally not hardcoded into every role except the official package endpoint used by the installer:
 
