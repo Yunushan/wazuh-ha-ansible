@@ -41,6 +41,6 @@ Committen Sie niemals generierte Passwörter, Zertifikate, private Schlüssel od
 
 ## Lizenz
 
-Dieses Automatisierungsprojekt steht unter der MIT-Lizenz. Wazuh selbst bleibt unter seinen eigenen Lizenzen.
+Dieses Automatisierungsprojekt steht unter der 0BSD-Lizenz. Wazuh selbst bleibt unter seinen eigenen Lizenzen.
 
 </div>
