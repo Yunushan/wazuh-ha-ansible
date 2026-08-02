@@ -41,6 +41,6 @@ Generated passwords, certificates, private keys या production inventories co
 
 ## लाइसेंस
 
-यह automation project MIT License के अंतर्गत जारी है। Wazuh स्वयं अपनी licenses के अंतर्गत रहता है।
+यह automation project 0BSD License के अंतर्गत जारी है। Wazuh स्वयं अपनी licenses के अंतर्गत रहता है।
 
 </div>
