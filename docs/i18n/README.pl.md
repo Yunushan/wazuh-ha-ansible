@@ -41,6 +41,6 @@ Nie commituj wygenerowanych haseł, certyfikatów, kluczy prywatnych ani invento
 
 ## Licencja
 
-Ten projekt automatyzacji jest wydany na licencji MIT. Wazuh pozostaje na własnych licencjach.
+Ten projekt automatyzacji jest wydany na licencji 0BSD. Wazuh pozostaje na własnych licencjach.
 
 </div>
