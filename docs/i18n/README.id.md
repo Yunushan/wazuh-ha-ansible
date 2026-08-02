@@ -41,6 +41,6 @@ Jangan commit password, sertifikat, private key, atau inventory produksi yang di
 
 ## Lisensi
 
-Proyek otomasi ini dirilis dengan Lisensi MIT. Wazuh tetap mengikuti lisensinya sendiri.
+Proyek otomasi ini dirilis dengan Lisensi 0BSD. Wazuh tetap mengikuti lisensinya sendiri.
 
 </div>
