@@ -41,6 +41,6 @@ ansible-playbook -i inventory/production.yml playbooks/site.yml
 
 ## 许可证
 
-本自动化项目采用 MIT 许可证。Wazuh 本身仍遵循其自己的许可证。
+本自动化项目采用 0BSD 许可证。Wazuh 本身仍遵循其自己的许可证。
 
 </div>
