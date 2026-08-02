@@ -1,6 +1,6 @@
 # Wazuh HA Ansible
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: 0BSD](https://img.shields.io/badge/License-0BSD-green.svg)](LICENSE)
 [![Automation](https://img.shields.io/badge/Automation-Ansible-blue.svg)](playbooks/site.yml)
 [![Wazuh](https://img.shields.io/badge/Wazuh-4.14%20ready-purple.svg)](docs/REFERENCES.md)
 [![Topology](https://img.shields.io/badge/Topology-3%20node%20adjustable-orange.svg)](docs/ARCHITECTURE.md)
@@ -8,7 +8,7 @@
 
 **Wazuh HA Ansible** is a GitHub-ready automation project for deploying a **full high-availability Wazuh cluster**. The default example is a **3-node converged HA topology**, and the inventory can be adjusted for larger separated enterprise deployments.
 
-This repository follows a clean open-source layout: MIT license, issue templates, security policy, contribution guide, Ansible playbooks, role-based automation, examples, operational documentation, and localized README files in 20 widely used languages.
+This repository follows a clean open-source layout: 0BSD license, issue templates, security policy, contribution guide, Ansible playbooks, role-based automation, examples, operational documentation, and localized README files in 20 widely used languages.
 
 > This project is an independent automation wrapper. It does not redistribute Wazuh binaries and is not affiliated with Wazuh, Inc. Wazuh packages, installers, and components remain governed by their own licenses and documentation.
 
@@ -267,7 +267,7 @@ wazuh-ha-ansible/
 ├── requirements.txt            # Python dependencies for controller
 ├── requirements.yml            # Ansible collection dependencies
 ├── Makefile                    # Common commands
-├── LICENSE                     # MIT license for this automation project
+├── LICENSE                     # 0BSD license for this automation project
 └── README.md                   # Main English README
 ```
 
@@ -355,6 +355,6 @@ wazuh-ha-ansible/
 
 ## License
 
-This automation project is released under the [MIT License](LICENSE).
+This automation project is released under the [0BSD License](LICENSE).
 
 Wazuh itself is not relicensed by this repository. Review Wazuh’s own licenses and documentation before production use.
