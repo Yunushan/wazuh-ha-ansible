@@ -41,6 +41,6 @@ Resmi Wazuh merkezi bileşen hedefleri, community/lab hedeflerinden ayrı göste
 
 ## Lisans
 
-Bu otomasyon projesi MIT Lisansı ile yayınlanmıştır. Wazuh kendi lisanslarına tabidir.
+Bu otomasyon projesi 0BSD Lisansı ile yayınlanmıştır. Wazuh kendi lisanslarına tabidir.
 
 </div>
