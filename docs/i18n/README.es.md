@@ -41,6 +41,6 @@ Nunca confirme contraseñas generadas, certificados, claves privadas ni inventar
 
 ## Licencia
 
-Este proyecto de automatización se publica bajo licencia MIT. Wazuh conserva sus propias licencias.
+Este proyecto de automatización se publica bajo licencia 0BSD. Wazuh conserva sus propias licencias.
 
 </div>
