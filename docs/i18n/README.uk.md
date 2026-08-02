@@ -41,6 +41,6 @@ ansible-playbook -i inventory/production.yml playbooks/site.yml
 
 ## Ліцензія
 
-Цей проєкт автоматизації випущено за MIT License. Wazuh залишається під власними ліцензіями.
+Цей проєкт автоматизації випущено за 0BSD License. Wazuh залишається під власними ліцензіями.
 
 </div>
