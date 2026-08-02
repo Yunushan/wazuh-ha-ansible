@@ -41,6 +41,6 @@ Không commit mật khẩu, certificate, private key hoặc production inventory
 
 ## Giấy phép
 
-Dự án automation này phát hành theo MIT License. Wazuh vẫn theo license riêng của nó.
+Dự án automation này phát hành theo 0BSD License. Wazuh vẫn theo license riêng của nó.
 
 </div>
