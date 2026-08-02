@@ -41,6 +41,6 @@ Never commit generated passwords, certificates, private keys, or production inve
 
 ## License
 
-This automation project is released under the MIT License. Wazuh itself remains under its own licenses.
+This automation project is released under the 0BSD License. Wazuh itself remains under its own licenses.
 
 </div>
