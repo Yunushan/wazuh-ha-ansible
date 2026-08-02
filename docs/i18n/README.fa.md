@@ -41,6 +41,6 @@ ansible-playbook -i inventory/production.yml playbooks/site.yml
 
 ## مجوز
 
-این پروژه اتوماسیون تحت MIT License منتشر شده است. Wazuh تحت مجوزهای خودش باقی می‌ماند.
+این پروژه اتوماسیون تحت 0BSD License منتشر شده است. Wazuh تحت مجوزهای خودش باقی می‌ماند.
 
 </div>
