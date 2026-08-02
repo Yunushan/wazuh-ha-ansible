@@ -41,6 +41,6 @@ Nunca faça commit de senhas geradas, certificados, chaves privadas ou inventár
 
 ## Licença
 
-Este projeto de automação é lançado sob a Licença MIT. O Wazuh permanece sob suas próprias licenças.
+Este projeto de automação é lançado sob a Licença 0BSD. O Wazuh permanece sob suas próprias licenças.
 
 </div>
