@@ -41,6 +41,6 @@ ansible-playbook -i inventory/production.yml playbooks/site.yml
 
 ## ライセンス
 
-この自動化プロジェクトは MIT License で公開されています。Wazuh 本体は独自のライセンスに従います。
+この自動化プロジェクトは 0BSD License で公開されています。Wazuh 本体は独自のライセンスに従います。
 
 </div>
