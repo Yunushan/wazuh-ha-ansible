@@ -41,6 +41,6 @@ Ne validez jamais les mots de passe générés, certificats, clés privées ou i
 
 ## Licence
 
-Ce projet d’automatisation est publié sous licence MIT. Wazuh conserve ses propres licences.
+Ce projet d’automatisation est publié sous licence 0BSD. Wazuh conserve ses propres licences.
 
 </div>
