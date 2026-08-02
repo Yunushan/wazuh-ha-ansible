@@ -41,6 +41,6 @@ Non committare password generate, certificati, chiavi private o inventari di pro
 
 ## Licenza
 
-Questo progetto di automazione è rilasciato con Licenza MIT. Wazuh mantiene le proprie licenze.
+Questo progetto di automazione è rilasciato con Licenza 0BSD. Wazuh mantiene le proprie licenze.
 
 </div>
